@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { MapPin, GraduationCap, Globe } from "lucide-react";
+import { useAuth } from "@/components/auth-provider";
 
 const API_BASE_URL = "http://localhost:5001";
 
@@ -12,6 +13,7 @@ type AnimPhase = "idle" | "out" | "in";
 
 export default function SignUpPage() {
     const router = useRouter();
+    const { refreshSession, refreshMyProfile } = useAuth();
     const [mode, setMode] = useState<Mode>("signup");
     const [accountType, setAccountType] = useState<AccountType>("traveler");
     const [displayedType, setDisplayedType] = useState<AccountType>("traveler");
@@ -62,9 +64,20 @@ export default function SignUpPage() {
                 }
                 const didLogin = await loginWithCredentials(form.email, form.password);
                 if (!didLogin) return;
+                const authedUser = await refreshSession();
+                if (authedUser?.user_id) {
+                    await refreshMyProfile(authedUser.user_id);
+                }
+                router.push(`/profile-setup?accountType=${accountType}`);
+                router.refresh();
+                return;
             } else {
                 const didLogin = await loginWithCredentials(form.email, form.password);
                 if (!didLogin) return;
+                const authedUser = await refreshSession();
+                if (authedUser?.user_id) {
+                    await refreshMyProfile(authedUser.user_id);
+                }
             }
 
             router.push("/");

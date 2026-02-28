@@ -8,13 +8,14 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 // Swap MOCK_PROFILE in travel-map.tsx with real data from your DB/auth context.
 
 export interface TripEntry {
-    id: string;
+    id: number;
     title: string;
     thumbnail: string;
     date: string;
 }
 
 export interface UserProfile {
+    userId: number;
     name: string;
     initials: string;
     email: string;
@@ -28,10 +29,16 @@ export interface UserProfile {
 interface UserProfileModalProps {
     profile: UserProfile;
     onClose: () => void;
+    onSelectTrip?: (tripId: number) => void;
     expandFrom?: "top-right" | "left";
 }
 
-export default function UserProfileModal({ profile, onClose, expandFrom = "top-right" }: UserProfileModalProps) {
+export default function UserProfileModal({
+    profile,
+    onClose,
+    onSelectTrip,
+    expandFrom = "top-right",
+}: UserProfileModalProps) {
     const animClass = expandFrom === "left" ? "modal-expand-left" : "modal-expand";
 
     return (
@@ -90,8 +97,13 @@ export default function UserProfileModal({ profile, onClose, expandFrom = "top-r
                                 </h2>
                                 <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
                                     {profile.trips.map((trip) => (
-                                        <div
+                                        <button
                                             key={trip.id}
+                                            type="button"
+                                            onClick={() => {
+                                                onSelectTrip?.(trip.id);
+                                                onClose();
+                                            }}
                                             className="group flex flex-col overflow-hidden rounded-xl border border-border bg-background hover:border-primary/30 transition-colors"
                                         >
                                             <div className="relative aspect-video overflow-hidden">
@@ -110,7 +122,7 @@ export default function UserProfileModal({ profile, onClose, expandFrom = "top-r
                                                     {trip.date}
                                                 </p>
                                             </div>
-                                        </div>
+                                        </button>
                                     ))}
                                 </div>
                             </>

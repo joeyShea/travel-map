@@ -2,14 +2,14 @@
 
 import Image from "next/image"
 import { X, ArrowRight, MapPin, Calendar } from "lucide-react"
-import type { TravelReview } from "@/lib/travel-data"
+import type { MapTrip } from "@/lib/trip-models"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
 interface SidebarPanelProps {
-  review: TravelReview
+  review: MapTrip
   onClose: () => void
-  onViewFull: (review: TravelReview) => void
-  onOpenAuthorProfile: (authorName: string) => void
+  onViewFull: (trip: MapTrip) => void
+  onOpenAuthorProfile: (userId: number) => void
 }
 
 export default function SidebarPanel({ review, onClose, onViewFull, onOpenAuthorProfile }: SidebarPanelProps) {
@@ -39,7 +39,7 @@ export default function SidebarPanel({ review, onClose, onViewFull, onOpenAuthor
           {/* Meta */}
           <div className="flex items-center gap-4 text-sm text-muted-foreground">
             <button
-              onClick={() => onOpenAuthorProfile(review.author)}
+              onClick={() => onOpenAuthorProfile(review.ownerUserId)}
               className="flex items-center gap-1.5 hover:text-foreground transition-colors"
             >
               <MapPin className="h-3.5 w-3.5" />

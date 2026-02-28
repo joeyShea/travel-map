@@ -2,16 +2,16 @@
 
 import Image from "next/image"
 import { ArrowLeft, MapPin, Calendar, User } from "lucide-react"
-import type { TravelReview, Activity } from "@/lib/travel-data"
+import type { MapActivity, MapTrip } from "@/lib/trip-models"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 
 interface FullScreenReviewProps {
-  review: TravelReview
-  selectedActivity: Activity | null
+  review: MapTrip
+  selectedActivity: MapActivity | null
   onBack: () => void
-  onSelectActivity: (activity: Activity | null) => void
-  onOpenAuthorProfile: (authorName: string) => void
+  onSelectActivity: (activity: MapActivity | null) => void
+  onOpenAuthorProfile: (userId: number) => void
 }
 
 export default function FullScreenReview({
@@ -40,7 +40,7 @@ export default function FullScreenReview({
           </h1>
           <div className="mt-2 flex items-center gap-4 text-sm text-white/70">
             <button
-              onClick={() => onOpenAuthorProfile(review.author)}
+              onClick={() => onOpenAuthorProfile(review.ownerUserId)}
               className="flex items-center gap-1.5 hover:text-white transition-colors"
             >
               <User className="h-3.5 w-3.5" />

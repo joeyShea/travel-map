@@ -3,23 +3,25 @@
 import { useEffect, useRef, useCallback } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import type { TravelReview, Activity } from "@/lib/travel-data";
+import type { MapActivity, MapTrip } from "@/lib/trip-models";
 
 interface MapViewProps {
-    reviews: TravelReview[];
-    selectedReview: TravelReview | null;
-    fullScreenReview: TravelReview | null;
-    selectedActivity: Activity | null;
-    onSelectReview: (review: TravelReview | null) => void;
-    onSelectActivity: (activity: Activity | null) => void;
+    trips: MapTrip[];
+    selectedTrip: MapTrip | null;
+    fullScreenTrip: MapTrip | null;
+    selectedActivity: MapActivity | null;
+    onSelectTripById: (tripId: number | null) => void;
+    onSelectActivity: (activity: MapActivity | null) => void;
 }
 
+const SELECTED_REVIEW_ZOOM = 16;
+
 export default function MapView({
-    reviews,
-    selectedReview,
-    fullScreenReview,
+    trips,
+    selectedTrip,
+    fullScreenTrip,
     selectedActivity,
-    onSelectReview,
+    onSelectTripById,
     onSelectActivity,
 }: MapViewProps) {
     const mapRef = useRef<L.Map | null>(null);
@@ -78,7 +80,7 @@ export default function MapView({
         };
     }, []);
 
-    const createPhotoIcon = useCallback((review: TravelReview, isActive: boolean) => {
+    const createPhotoIcon = useCallback((trip: MapTrip, isActive: boolean) => {
         const size = isActive ? 80 : 64;
         return L.divIcon({
             className: "photo-marker",
@@ -95,8 +97,8 @@ export default function MapView({
           position: relative;
         ">
           <img
-            src="${review.thumbnail}"
-            alt="${review.title}"
+            src="${trip.thumbnail}"
+            alt="${trip.title}"
             style="width:100%;height:100%;object-fit:cover;"
             crossorigin="anonymous"
           />
@@ -112,7 +114,7 @@ export default function MapView({
             font-weight: 600;
             font-family: system-ui, sans-serif;
             letter-spacing: 0.02em;
-          ">${review.title}</div>
+          ">${trip.title}</div>
         </div>
       `,
             iconSize: [size, size],
@@ -120,7 +122,7 @@ export default function MapView({
         });
     }, []);
 
-    const createActivityIcon = useCallback((activity: Activity, isActive: boolean) => {
+    const createActivityIcon = useCallback((activity: MapActivity, isActive: boolean) => {
         const size = isActive ? 60 : 48;
         return L.divIcon({
             className: "activity-marker",
@@ -157,19 +159,19 @@ export default function MapView({
         markersRef.current.forEach((m) => m.remove());
         markersRef.current = [];
 
-        if (fullScreenReview) return; // Hide review markers when full screen
+        if (fullScreenTrip) return; // Hide trip markers when full screen
 
-        reviews.forEach((review) => {
-            const isActive = selectedReview?.id === review.id;
-            const icon = createPhotoIcon(review, isActive);
-            const marker = L.marker([review.lat, review.lng], { icon })
+        trips.forEach((trip) => {
+            const isActive = selectedTrip?.id === trip.id;
+            const icon = createPhotoIcon(trip, isActive);
+            const marker = L.marker([trip.lat, trip.lng], { icon })
                 .addTo(map)
                 .on("click", () => {
-                    onSelectReview(review);
+                    onSelectTripById(trip.id);
                 });
             markersRef.current.push(marker);
         });
-    }, [reviews, selectedReview, fullScreenReview, createPhotoIcon, onSelectReview]);
+    }, [trips, selectedTrip, fullScreenTrip, createPhotoIcon, onSelectTripById]);
 
     // Create/update activity markers
     useEffect(() => {
@@ -180,9 +182,9 @@ export default function MapView({
         activityMarkersRef.current.forEach((m) => m.remove());
         activityMarkersRef.current = [];
 
-        if (!fullScreenReview) return;
+        if (!fullScreenTrip) return;
 
-        fullScreenReview.activities.forEach((activity) => {
+        fullScreenTrip.activities.forEach((activity) => {
             const isActive = selectedActivity?.id === activity.id;
             const icon = createActivityIcon(activity, isActive);
             const marker = L.marker([activity.lat, activity.lng], { icon })
@@ -195,35 +197,19 @@ export default function MapView({
                 });
             activityMarkersRef.current.push(marker);
         });
-    }, [fullScreenReview, selectedActivity, createActivityIcon, onSelectActivity]);
-
-    // Fly to review area when entering full screen
-    useEffect(() => {
-        const map = mapRef.current;
-        if (!map) return;
-
-        if (fullScreenReview) {
-            const bounds = L.latLngBounds(fullScreenReview.activities.map((a) => [a.lat, a.lng]));
-            map.flyToBounds(bounds.pad(0.5), {
-                duration: 1.5,
-                maxZoom: 12,
-            });
-        } else if (!selectedReview) {
-            map.flyTo([39.5, -98.35], 5, { duration: 1.5 });
-        }
-    }, [fullScreenReview, selectedReview]);
+    }, [fullScreenTrip, selectedActivity, createActivityIcon, onSelectActivity]);
 
     // Fly to selected review in sidebar mode
     useEffect(() => {
         const map = mapRef.current;
-        if (!map || fullScreenReview) return;
+        if (!map || fullScreenTrip) return;
 
-        if (selectedReview) {
-            map.flyTo([selectedReview.lat, selectedReview.lng], 11, {
+        if (selectedTrip) {
+            map.flyTo([selectedTrip.lat, selectedTrip.lng], SELECTED_REVIEW_ZOOM, {
                 duration: 1.2,
             });
         }
-    }, [selectedReview, fullScreenReview]);
+    }, [selectedTrip, fullScreenTrip]);
 
     // Invalidate map size when container resizes (sidebar open/close)
     useEffect(() => {

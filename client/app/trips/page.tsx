@@ -1,17 +1,18 @@
-"use client"
+"use client";
 
-import Link from "next/link"
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { ImagePlus, MapPin, Plus, Sparkles, Trash2 } from "lucide-react";
 
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
+import { useAuth } from "@/components/auth-provider";
+import PlacePicker, { type PlaceOption } from "@/components/place-picker";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { createTrip } from "@/lib/api-client";
+import type { TripDuration, TripVisibility } from "@/lib/api-types";
 
-const API_BASE_URL = "http://localhost:5001"
-const TRIPS_STORAGE_KEY = "travel-map.trips"
 const AVAILABLE_TAGS = [
   "beach",
   "city",
@@ -22,409 +23,299 @@ const AVAILABLE_TAGS = [
   "nightlife",
   "nature",
   "cultural",
-] as const
+] as const;
+
+const BANNER_PLACEHOLDER =
+  "https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=1200&q=80";
+
+interface StopDraft {
+  id: string;
+  title: string;
+  notes: string;
+  cost: string;
+  imageUrl: string;
+  location: PlaceOption | null;
+}
+
+function clean(value: string): string | undefined {
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function formatPreviewDate(value: string): string {
+  if (!value) {
+    return "No date yet";
+  }
+
+  const monthInputMatch = /^(\d{4})-(\d{2})$/.exec(value);
+  if (!monthInputMatch) {
+    return value;
+  }
+
+  const [, year, month] = monthInputMatch;
+  const monthIndex = Number(month) - 1;
+  if (monthIndex < 0 || monthIndex > 11) {
+    return value;
+  }
+
+  return new Date(Number(year), monthIndex, 1).toLocaleString(undefined, {
+    month: "long",
+    year: "numeric",
+  });
+}
+
+function makeStopDraft(): StopDraft {
+  return {
+    id: crypto.randomUUID(),
+    title: "",
+    notes: "",
+    cost: "",
+    imageUrl: "",
+    location: null,
+  };
+}
 
 async function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "")
-    reader.onerror = () => reject(new Error("Unable to read selected image"))
-    reader.readAsDataURL(file)
-  })
-}
-
-type Lodging = {
-  lodge_id: string
-  trip_id: string
-  address: string
-  thumbnail_url: string
-  title: string
-  description: string
-  latitude: string
-  longitude: string
-  cost: string
-}
-
-type Activity = {
-  activity_id: string
-  trip_id: string
-  address: string
-  thumbnail_url: string
-  title: string
-  location: string
-  description: string
-  latitude: string
-  longitude: string
-  cost: string
-}
-
-type Comment = {
-  comment_id: string
-  user_id: number | null
-  trip_id: string
-  body: string
-  created_at: string
-}
-
-type DurationOption = "multiday trip" | "day trip" | "overnight trip"
-
-type Trip = {
-  trip_id: string
-  thumbnail_url: string
-  title: string
-  description: string
-  latitude: string
-  longitude: string
-  cost: string
-  duration: DurationOption
-  date: string
-  visibility: "public" | "private" | "friends"
-  owner_user_id: number | null
-  tags: string[]
-  lodgings: Lodging[]
-  activities: Activity[]
-  comments: Comment[]
-}
-
-type LodgingDraft = Omit<Lodging, "lodge_id" | "trip_id">
-type ActivityDraft = Omit<Activity, "activity_id" | "trip_id">
-
-const emptyLodgingDraft: LodgingDraft = {
-  address: "",
-  thumbnail_url: "",
-  title: "",
-  description: "",
-  latitude: "",
-  longitude: "",
-  cost: "",
-}
-
-const emptyActivityDraft: ActivityDraft = {
-  address: "",
-  thumbnail_url: "",
-  title: "",
-  location: "",
-  description: "",
-  latitude: "",
-  longitude: "",
-  cost: "",
-}
-
-function isDurationOption(value: unknown): value is DurationOption {
-  return value === "multiday trip" || value === "day trip" || value === "overnight trip"
-}
-
-function normalizeTrip(rawTrip: Partial<Trip>): Trip {
-  return {
-    trip_id: rawTrip.trip_id || crypto.randomUUID(),
-    thumbnail_url: rawTrip.thumbnail_url || "",
-    title: rawTrip.title || "",
-    description: rawTrip.description || "",
-    latitude: rawTrip.latitude || "",
-    longitude: rawTrip.longitude || "",
-    cost: rawTrip.cost || "",
-    duration: isDurationOption(rawTrip.duration) ? rawTrip.duration : "multiday trip",
-    date: rawTrip.date || "",
-    visibility: rawTrip.visibility || "public",
-    owner_user_id: typeof rawTrip.owner_user_id === "number" ? rawTrip.owner_user_id : null,
-    tags: Array.isArray(rawTrip.tags) ? rawTrip.tags : [],
-    lodgings: Array.isArray(rawTrip.lodgings) ? rawTrip.lodgings : [],
-    activities: Array.isArray(rawTrip.activities) ? rawTrip.activities : [],
-    comments: Array.isArray(rawTrip.comments) ? rawTrip.comments : [],
-  }
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
+    reader.onerror = () => reject(new Error("Unable to read selected image"));
+    reader.readAsDataURL(file);
+  });
 }
 
 export default function TripsPage() {
-  const router = useRouter()
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const returnTo = searchParams.get("returnTo") || "/";
+  const { status, isStudent } = useAuth();
 
-  const [ready, setReady] = useState(false)
-  const [currentUserId, setCurrentUserId] = useState<number | null>(null)
-  const [trips, setTrips] = useState<Trip[]>([])
-  const [title, setTitle] = useState("")
-  const [thumbnailUrl, setThumbnailUrl] = useState("")
-  const [description, setDescription] = useState("")
-  const [latitude, setLatitude] = useState("")
-  const [longitude, setLongitude] = useState("")
-  const [cost, setCost] = useState("")
-  const [duration, setDuration] = useState<DurationOption>("multiday trip")
-  const [date, setDate] = useState("")
-  const [visibility, setVisibility] = useState<"public" | "private" | "friends">("public")
-  const [selectedTags, setSelectedTags] = useState<string[]>([])
-  const [lodgingDrafts, setLodgingDrafts] = useState<Record<string, LodgingDraft>>({})
-  const [showLodgingFormByTrip, setShowLodgingFormByTrip] = useState<Record<string, boolean>>({})
-  const [activityDrafts, setActivityDrafts] = useState<Record<string, ActivityDraft>>({})
-  const [showActivityFormByTrip, setShowActivityFormByTrip] = useState<Record<string, boolean>>({})
+  const [isSavingTrip, setIsSavingTrip] = useState(false);
+  const [error, setError] = useState("");
+
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [coverImage, setCoverImage] = useState("");
+  const [tripLocation, setTripLocation] = useState<PlaceOption | null>(null);
+  const [cost, setCost] = useState("");
+  const [duration, setDuration] = useState<TripDuration>("multiday trip");
+  const [date, setDate] = useState("");
+  const [visibility, setVisibility] = useState<TripVisibility>("public");
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+
+  const [lodgings, setLodgings] = useState<StopDraft[]>([]);
+  const [activities, setActivities] = useState<StopDraft[]>([]);
 
   useEffect(() => {
-    let isMounted = true
-
-    async function checkSession() {
-      try {
-        const response = await fetch(`${API_BASE_URL}/me`, {
-          method: "GET",
-          credentials: "include",
-        })
-
-        if (!response.ok) {
-          router.replace("/login")
-          return
-        }
-
-        if (!isMounted) {
-          return
-        }
-
-        const data = await response.json()
-        const sessionUserId = typeof data?.user?.user_id === "number" ? data.user.user_id : null
-        setCurrentUserId(sessionUserId)
-
-        const rawTrips = window.localStorage.getItem(TRIPS_STORAGE_KEY)
-        if (rawTrips) {
-          const parsedTrips = JSON.parse(rawTrips) as Partial<Trip>[]
-          setTrips(parsedTrips.map(normalizeTrip))
-        }
-        setReady(true)
-      } catch {
-        router.replace("/login")
-      }
+    if (status === "unauthenticated") {
+      router.replace("/signup");
     }
-
-    void checkSession()
-
-    return () => {
-      isMounted = false
+    if (status === "authenticated" && !isStudent) {
+      router.replace("/");
     }
-  }, [router])
+  }, [isStudent, router, status]);
 
-  function persistTrips(nextTrips: Trip[]) {
-    setTrips(nextTrips)
-    window.localStorage.setItem(TRIPS_STORAGE_KEY, JSON.stringify(nextTrips))
-  }
-
-  function handleCreateTrip(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-
-    if (!title.trim()) {
-      return
-    }
-
-    const createdTrip: Trip = {
-      trip_id: crypto.randomUUID(),
-      thumbnail_url: thumbnailUrl.trim(),
-      title: title.trim(),
-      description: description.trim(),
-      latitude: latitude.trim(),
-      longitude: longitude.trim(),
-      cost: cost.trim(),
-      duration,
-      date: date.trim(),
-      visibility,
-      owner_user_id: currentUserId,
-      tags: selectedTags,
-      lodgings: [],
-      activities: [],
-      comments: [],
-    }
-
-    persistTrips([createdTrip, ...trips])
-    setTitle("")
-    setThumbnailUrl("")
-    setDescription("")
-    setLatitude("")
-    setLongitude("")
-    setCost("")
-    setDuration("multiday trip")
-    setDate("")
-    setVisibility("public")
-    setSelectedTags([])
+  if (status !== "authenticated" || !isStudent) {
+    return null;
   }
 
   function toggleTag(tag: string) {
     setSelectedTags((current) => {
       if (current.includes(tag)) {
-        return current.filter((item) => item !== tag)
+        return current.filter((item) => item !== tag);
       }
-      return [...current, tag]
-    })
+      return [...current, tag];
+    });
   }
 
-  function addLodging(tripId: string) {
-    const draft = lodgingDrafts[tripId] || emptyLodgingDraft
-    if (!draft.title.trim()) {
-      return
+  function addStop(kind: "lodging" | "activity") {
+    const stop = makeStopDraft();
+    if (kind === "lodging") {
+      setLodgings((current) => [...current, stop]);
+      return;
+    }
+    setActivities((current) => [...current, stop]);
+  }
+
+  function updateStop(
+    kind: "lodging" | "activity",
+    id: string,
+    patch: Partial<StopDraft>,
+  ) {
+    if (kind === "lodging") {
+      setLodgings((current) => current.map((stop) => (stop.id === id ? { ...stop, ...patch } : stop)));
+      return;
     }
 
-    const nextTrips = trips.map((trip) => {
-      if (trip.trip_id !== tripId) {
-        return trip
-      }
-
-      return {
-        ...trip,
-        lodgings: [
-          ...trip.lodgings,
-          {
-            lodge_id: crypto.randomUUID(),
-            trip_id: trip.trip_id,
-            address: draft.address.trim(),
-            thumbnail_url: draft.thumbnail_url.trim(),
-            title: draft.title.trim(),
-            description: draft.description.trim(),
-            latitude: draft.latitude.trim(),
-            longitude: draft.longitude.trim(),
-            cost: draft.cost.trim(),
-          },
-        ],
-      }
-    })
-
-    persistTrips(nextTrips)
-    setLodgingDrafts((current) => ({ ...current, [tripId]: { ...emptyLodgingDraft } }))
-    setShowLodgingFormByTrip((current) => ({ ...current, [tripId]: false }))
+    setActivities((current) => current.map((stop) => (stop.id === id ? { ...stop, ...patch } : stop)));
   }
 
-  function addActivity(tripId: string) {
-    const draft = activityDrafts[tripId] || emptyActivityDraft
-    if (!draft.title.trim()) {
-      return
+  function removeStop(kind: "lodging" | "activity", id: string) {
+    if (kind === "lodging") {
+      setLodgings((current) => current.filter((stop) => stop.id !== id));
+      return;
     }
 
-    const nextTrips = trips.map((trip) => {
-      if (trip.trip_id !== tripId) {
-        return trip
-      }
-
-      return {
-        ...trip,
-        activities: [
-          ...trip.activities,
-          {
-            activity_id: crypto.randomUUID(),
-            trip_id: trip.trip_id,
-            address: draft.address.trim(),
-            thumbnail_url: draft.thumbnail_url.trim(),
-            title: draft.title.trim(),
-            location: draft.location.trim(),
-            description: draft.description.trim(),
-            latitude: draft.latitude.trim(),
-            longitude: draft.longitude.trim(),
-            cost: draft.cost.trim(),
-          },
-        ],
-      }
-    })
-
-    persistTrips(nextTrips)
-    setActivityDrafts((current) => ({ ...current, [tripId]: { ...emptyActivityDraft } }))
-    setShowActivityFormByTrip((current) => ({ ...current, [tripId]: false }))
+    setActivities((current) => current.filter((stop) => stop.id !== id));
   }
 
-  if (!ready) {
-    return null
+  async function handleCreateTrip() {
+    setError("");
+
+    if (!title.trim()) {
+      setError("Add a trip title before posting.");
+      return;
+    }
+
+    if (!tripLocation) {
+      setError("Choose a trip location before posting.");
+      return;
+    }
+
+    setIsSavingTrip(true);
+
+    try {
+      await createTrip({
+        title: title.trim(),
+        thumbnail_url: clean(coverImage),
+        description: clean(description),
+        latitude: `${tripLocation.latitude}`,
+        longitude: `${tripLocation.longitude}`,
+        cost: clean(cost),
+        duration,
+        date: clean(date),
+        visibility,
+        tags: selectedTags,
+        lodgings: lodgings
+          .filter((stop) => stop.title.trim())
+          .map((stop) => ({
+            title: stop.title.trim(),
+            description: clean(stop.notes),
+            address: stop.location?.address,
+            latitude: stop.location ? `${stop.location.latitude}` : undefined,
+            longitude: stop.location ? `${stop.location.longitude}` : undefined,
+            cost: clean(stop.cost),
+            thumbnail_url: clean(stop.imageUrl),
+          })),
+        activities: activities
+          .filter((stop) => stop.title.trim())
+          .map((stop) => ({
+            title: stop.title.trim(),
+            description: clean(stop.notes),
+            location: stop.location?.label,
+            address: stop.location?.address,
+            latitude: stop.location ? `${stop.location.latitude}` : undefined,
+            longitude: stop.location ? `${stop.location.longitude}` : undefined,
+            cost: clean(stop.cost),
+            thumbnail_url: clean(stop.imageUrl),
+          })),
+      });
+
+      router.push(returnTo);
+      return;
+    } catch {
+      setError("Could not post this trip right now. Please try again.");
+    } finally {
+      setIsSavingTrip(false);
+    }
   }
 
   return (
-    <main className="h-screen overflow-y-auto bg-background p-4 md:p-8">
-      <div className="mx-auto w-full max-w-4xl space-y-6">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Add a trip</h1>
-            <p className="text-sm text-muted-foreground">Create trips and add lodging + activities.</p>
+    <main className="h-screen overflow-y-auto bg-[linear-gradient(180deg,#f7efe2_0%,#f4f4ef_55%,#eef3f6_100%)] px-4 py-6 md:px-8">
+      <div className="mx-auto flex w-full max-w-7xl flex-col items-start gap-6 lg:flex-row">
+        <section className="w-full rounded-3xl border border-stone-200/80 bg-white/85 p-5 shadow-xl shadow-stone-200/30 backdrop-blur-sm md:p-7 lg:w-2/3">
+          <div className="mb-6 flex items-center justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.25em] text-amber-700">Trip Composer</p>
+              <h1 className="mt-1 text-3xl font-semibold tracking-tight text-stone-900">Craft your next post</h1>
+            </div>
+            <Link href={returnTo}>
+              <Button variant="outline" className="rounded-full">
+                Back to Map
+              </Button>
+            </Link>
           </div>
-          <Link href="/">
-            <Button variant="outline">Back to Map</Button>
-          </Link>
-        </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Create a Trip</CardTitle>
-            <CardDescription>Fill in the core trip fields from your data structure.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form className="grid gap-4 md:grid-cols-2" onSubmit={handleCreateTrip}>
-              <div className="space-y-2">
-                <Label htmlFor="title">Title</Label>
-                <Input
-                  id="title"
-                  value={title}
-                  onChange={(event) => setTitle(event.target.value)}
-                  placeholder="Summer in Italy"
-                  required
-                />
+          <div className="space-y-6">
+            <div className="rounded-2xl border border-stone-200 bg-stone-50/80 p-4">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">Cover Image</p>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <label className="inline-flex w-fit cursor-pointer items-center gap-2 rounded-full border border-stone-200 bg-white px-4 py-2 text-sm font-medium text-stone-700 transition-colors hover:bg-stone-100">
+                  <ImagePlus className="h-4 w-4 text-amber-700" />
+                  Upload cover image
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="sr-only"
+                    onChange={async (event) => {
+                      const file = event.target.files?.[0];
+                      if (!file) {
+                        setCoverImage("");
+                        return;
+                      }
+
+                      const dataUrl = await fileToDataUrl(file);
+                      setCoverImage(dataUrl);
+                    }}
+                  />
+                </label>
+                <p className="text-sm text-stone-500">
+                  {coverImage ? "Cover selected. Preview updates live." : "No cover yet. Add one to set the tone."}
+                </p>
               </div>
+            </div>
 
+            <div className="grid gap-4">
+              <input
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                placeholder="Title your trip..."
+                className="w-full border-b border-stone-200 bg-transparent pb-3 text-4xl font-semibold tracking-tight text-stone-900 outline-none placeholder:text-stone-300"
+              />
+
+              <PlacePicker
+                label="Trip location"
+                placeholder="Search city, park, landmark..."
+                value={tripLocation}
+                onChange={setTripLocation}
+              />
+
+              <Textarea
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                rows={7}
+                placeholder="Tell the story: what you did, what surprised you, and what someone should know before visiting..."
+                className="resize-none rounded-2xl border-stone-200 bg-white text-base leading-relaxed"
+              />
+            </div>
+
+            <div className="grid gap-4 rounded-2xl border border-stone-200 bg-stone-50/70 p-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="thumbnail">Thumbnail URL</Label>
-                <Input
-                  id="thumbnail"
-                  type="file"
-                  accept="image/*"
-                  onChange={async (event) => {
-                    const file = event.target.files?.[0]
-                    if (!file) {
-                      setThumbnailUrl("")
-                      return
-                    }
-
-                    const encoded = await fileToDataUrl(file)
-                    setThumbnailUrl(encoded)
-                  }}
-                />
-                {thumbnailUrl ? <p className="text-xs text-muted-foreground">Image selected</p> : null}
+                <label className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">Date</label>
+                <Input type="month" value={date} onChange={(event) => setDate(event.target.value)} />
               </div>
-
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="tripDescription">Description</Label>
-                <Textarea
-                  id="tripDescription"
-                  value={description}
-                  onChange={(event) => setDescription(event.target.value)}
-                  placeholder="What makes this trip special?"
-                />
-              </div>
-
               <div className="space-y-2">
-                <Label htmlFor="latitude">Latitude</Label>
-                <Input id="latitude" value={latitude} onChange={(event) => setLatitude(event.target.value)} placeholder="41.9028" />
+                <label className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">Budget</label>
+                <Input value={cost} onChange={(event) => setCost(event.target.value)} placeholder="$1450" />
               </div>
-
               <div className="space-y-2">
-                <Label htmlFor="longitude">Longitude</Label>
-                <Input id="longitude" value={longitude} onChange={(event) => setLongitude(event.target.value)} placeholder="12.4964" />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="cost">Cost</Label>
-                <Input id="cost" value={cost} onChange={(event) => setCost(event.target.value)} placeholder="1450.00" />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="duration">Duration</Label>
+                <label className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">Duration</label>
                 <select
-                  id="duration"
-                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  className="h-10 w-full rounded-md border border-input bg-white px-3 text-sm"
                   value={duration}
-                  onChange={(event) => setDuration(event.target.value as DurationOption)}
+                  onChange={(event) => setDuration(event.target.value as TripDuration)}
                 >
                   <option value="multiday trip">multiday trip</option>
                   <option value="day trip">day trip</option>
                   <option value="overnight trip">overnight trip</option>
                 </select>
               </div>
-
               <div className="space-y-2">
-                <Label htmlFor="date">Date (MM-YY)</Label>
-                <Input id="date" value={date} onChange={(event) => setDate(event.target.value)} placeholder="06-26" />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="visibility">Visibility</Label>
+                <label className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">Visibility</label>
                 <select
-                  id="visibility"
-                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  className="h-10 w-full rounded-md border border-input bg-white px-3 text-sm"
                   value={visibility}
-                  onChange={(event) => setVisibility(event.target.value as "public" | "private" | "friends")}
+                  onChange={(event) => setVisibility(event.target.value as TripVisibility)}
                 >
                   <option value="public">public</option>
                   <option value="private">private</option>
@@ -433,328 +324,278 @@ export default function TripsPage() {
               </div>
 
               <div className="space-y-2 md:col-span-2">
-                <Label>Tags</Label>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">Tags</p>
                 <div className="flex flex-wrap gap-2">
                   {AVAILABLE_TAGS.map((tag) => {
-                    const isSelected = selectedTags.includes(tag)
+                    const selected = selectedTags.includes(tag);
                     return (
-                      <Button
+                      <button
                         key={tag}
                         type="button"
-                        variant={isSelected ? "default" : "outline"}
-                        size="sm"
                         onClick={() => toggleTag(tag)}
+                        className={`rounded-full border px-3 py-1.5 text-xs font-semibold tracking-wide transition-colors ${
+                          selected
+                            ? "border-amber-600 bg-amber-600 text-white"
+                            : "border-stone-300 bg-white text-stone-700 hover:border-stone-400"
+                        }`}
                       >
                         {tag}
-                      </Button>
-                    )
+                      </button>
+                    );
                   })}
                 </div>
               </div>
+            </div>
 
-              <div className="md:col-span-2">
-                <Button type="submit">Create Trip</Button>
+            <div className="space-y-4 rounded-2xl border border-stone-200 bg-white p-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-stone-900">Places you stayed</h2>
+                <Button type="button" variant="outline" className="rounded-full" onClick={() => addStop("lodging")}>
+                  <Plus className="mr-1 h-4 w-4" />
+                  Add stay
+                </Button>
               </div>
-            </form>
-          </CardContent>
-        </Card>
 
-        <div className="space-y-4">
-          {trips.length === 0 ? (
-            <Card>
-              <CardContent className="pt-6 text-sm text-muted-foreground">
-                No trips yet. Create your first trip above.
-              </CardContent>
-            </Card>
-          ) : null}
+              {lodgings.length === 0 ? (
+                <p className="text-sm text-stone-500">Add hotels, campgrounds, or anywhere you stayed.</p>
+              ) : null}
 
-          {trips.map((trip) => (
-            <Card key={trip.trip_id}>
-              <CardHeader>
-                <CardTitle>{trip.title}</CardTitle>
-                <CardDescription>
-                  {trip.date || "No date"} • {trip.visibility}
-                  {trip.duration ? ` • ${trip.duration}` : ""}
-                </CardDescription>
-              </CardHeader>
+              <div className="space-y-4">
+                {lodgings.map((stop, index) => (
+                  <div key={stop.id} className="rounded-xl border border-stone-200 bg-stone-50/80 p-4">
+                    <div className="mb-3 flex items-center justify-between">
+                      <p className="text-sm font-semibold text-stone-700">Stay #{index + 1}</p>
+                      <button
+                        type="button"
+                        onClick={() => removeStop("lodging", stop.id)}
+                        className="rounded-full p-1 text-stone-400 transition-colors hover:bg-white hover:text-stone-700"
+                        aria-label="Remove stay"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
 
-              <CardContent className="space-y-6">
-                <div className="grid gap-2 text-sm text-muted-foreground md:grid-cols-2">
-                  <p>Trip ID: {trip.trip_id}</p>
-                  <p>Owner User ID: {trip.owner_user_id ?? "unknown"}</p>
-                  <p>Latitude: {trip.latitude || "-"}</p>
-                  <p>Longitude: {trip.longitude || "-"}</p>
-                  <p>Cost: {trip.cost || "-"}</p>
-                  <p>Tags: {trip.tags.length ? trip.tags.join(", ") : "-"}</p>
-                </div>
-
-                <div className="grid gap-6 md:grid-cols-2">
-                <div className="space-y-3">
-                  <h3 className="text-sm font-medium">Lodging</h3>
-                  {!showLodgingFormByTrip[trip.trip_id] ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => setShowLodgingFormByTrip((current) => ({ ...current, [trip.trip_id]: true }))}
-                    >
-                      + Add lodging
-                    </Button>
-                  ) : (
-                    <div className="grid gap-2">
+                    <div className="grid gap-3">
                       <Input
-                        value={(lodgingDrafts[trip.trip_id] || emptyLodgingDraft).title}
-                        onChange={(event) =>
-                          setLodgingDrafts((current) => ({
-                            ...current,
-                            [trip.trip_id]: { ...(current[trip.trip_id] || emptyLodgingDraft), title: event.target.value },
-                          }))
-                        }
-                        placeholder="Title"
+                        value={stop.title}
+                        onChange={(event) => updateStop("lodging", stop.id, { title: event.target.value })}
+                        placeholder="Name this stay"
                       />
-                      <Input
-                        value={(lodgingDrafts[trip.trip_id] || emptyLodgingDraft).address}
-                        onChange={(event) =>
-                          setLodgingDrafts((current) => ({
-                            ...current,
-                            [trip.trip_id]: { ...(current[trip.trip_id] || emptyLodgingDraft), address: event.target.value },
-                          }))
-                        }
-                        placeholder="Address"
-                      />
-                      <Input
-                        type="file"
-                        accept="image/*"
-                        onChange={async (event) => {
-                          const file = event.target.files?.[0]
-                          const encoded = file ? await fileToDataUrl(file) : ""
 
-                          setLodgingDrafts((current) => ({
-                            ...current,
-                            [trip.trip_id]: {
-                              ...(current[trip.trip_id] || emptyLodgingDraft),
-                              thumbnail_url: encoded,
-                            },
-                          }))
-                        }}
+                      <PlacePicker
+                        label="Location"
+                        placeholder="Search where this stay was"
+                        value={stop.location}
+                        onChange={(location) => updateStop("lodging", stop.id, { location })}
                       />
-                      {(lodgingDrafts[trip.trip_id] || emptyLodgingDraft).thumbnail_url ? (
-                        <p className="text-xs text-muted-foreground">Image selected</p>
-                      ) : null}
+
                       <Textarea
-                        value={(lodgingDrafts[trip.trip_id] || emptyLodgingDraft).description}
-                        onChange={(event) =>
-                          setLodgingDrafts((current) => ({
-                            ...current,
-                            [trip.trip_id]: {
-                              ...(current[trip.trip_id] || emptyLodgingDraft),
-                              description: event.target.value,
-                            },
-                          }))
-                        }
-                        placeholder="Description"
+                        value={stop.notes}
+                        rows={3}
+                        onChange={(event) => updateStop("lodging", stop.id, { notes: event.target.value })}
+                        placeholder="What made this place good (or bad)?"
+                        className="resize-none"
                       />
-                      <div className="grid gap-2 sm:grid-cols-3">
+
+                      <div className="grid gap-3 sm:grid-cols-2">
                         <Input
-                          value={(lodgingDrafts[trip.trip_id] || emptyLodgingDraft).latitude}
-                          onChange={(event) =>
-                            setLodgingDrafts((current) => ({
-                              ...current,
-                              [trip.trip_id]: { ...(current[trip.trip_id] || emptyLodgingDraft), latitude: event.target.value },
-                            }))
-                          }
-                          placeholder="Latitude"
-                        />
-                        <Input
-                          value={(lodgingDrafts[trip.trip_id] || emptyLodgingDraft).longitude}
-                          onChange={(event) =>
-                            setLodgingDrafts((current) => ({
-                              ...current,
-                              [trip.trip_id]: { ...(current[trip.trip_id] || emptyLodgingDraft), longitude: event.target.value },
-                            }))
-                          }
-                          placeholder="Longitude"
-                        />
-                        <Input
-                          value={(lodgingDrafts[trip.trip_id] || emptyLodgingDraft).cost}
-                          onChange={(event) =>
-                            setLodgingDrafts((current) => ({
-                              ...current,
-                              [trip.trip_id]: { ...(current[trip.trip_id] || emptyLodgingDraft), cost: event.target.value },
-                            }))
-                          }
+                          value={stop.cost}
+                          onChange={(event) => updateStop("lodging", stop.id, { cost: event.target.value })}
                           placeholder="Cost"
                         />
-                      </div>
-                      <div className="flex gap-2">
-                        <Button type="button" onClick={() => addLodging(trip.trip_id)}>
-                          Save Lodging
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => setShowLodgingFormByTrip((current) => ({ ...current, [trip.trip_id]: false }))}
-                        >
-                          Cancel
-                        </Button>
+                        <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-md border border-stone-200 bg-white px-3 py-2 text-sm text-stone-600 transition-colors hover:bg-stone-100">
+                          <ImagePlus className="h-4 w-4 text-amber-700" />
+                          Add photo
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="sr-only"
+                            onChange={async (event) => {
+                              const file = event.target.files?.[0];
+                              if (!file) {
+                                updateStop("lodging", stop.id, { imageUrl: "" });
+                                return;
+                              }
+                              const dataUrl = await fileToDataUrl(file);
+                              updateStop("lodging", stop.id, { imageUrl: dataUrl });
+                            }}
+                          />
+                        </label>
                       </div>
                     </div>
-                  )}
-                  <ul className="space-y-1 text-sm text-muted-foreground">
-                    {trip.lodgings.map((lodging) => (
-                      <li key={lodging.lodge_id}>• {lodging.title || "Untitled lodging"}</li>
-                    ))}
-                    {trip.lodgings.length === 0 ? <li>No lodging added yet.</li> : null}
-                  </ul>
-                </div>
+                  </div>
+                ))}
+              </div>
+            </div>
 
-                <div className="space-y-3">
-                  <h3 className="text-sm font-medium">Activities</h3>
-                  {!showActivityFormByTrip[trip.trip_id] ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => setShowActivityFormByTrip((current) => ({ ...current, [trip.trip_id]: true }))}
-                    >
-                      + Add activity
-                    </Button>
-                  ) : (
-                    <div className="grid gap-2">
-                      <Input
-                        value={(activityDrafts[trip.trip_id] || emptyActivityDraft).title}
-                        onChange={(event) =>
-                          setActivityDrafts((current) => ({
-                            ...current,
-                            [trip.trip_id]: { ...(current[trip.trip_id] || emptyActivityDraft), title: event.target.value },
-                          }))
-                        }
-                        placeholder="Title"
-                      />
-                      <Input
-                        value={(activityDrafts[trip.trip_id] || emptyActivityDraft).location}
-                        onChange={(event) =>
-                          setActivityDrafts((current) => ({
-                            ...current,
-                            [trip.trip_id]: {
-                              ...(current[trip.trip_id] || emptyActivityDraft),
-                              location: event.target.value,
-                            },
-                          }))
-                        }
-                        placeholder="Location"
-                      />
-                      <Input
-                        value={(activityDrafts[trip.trip_id] || emptyActivityDraft).address}
-                        onChange={(event) =>
-                          setActivityDrafts((current) => ({
-                            ...current,
-                            [trip.trip_id]: { ...(current[trip.trip_id] || emptyActivityDraft), address: event.target.value },
-                          }))
-                        }
-                        placeholder="Address"
-                      />
-                      <Input
-                        type="file"
-                        accept="image/*"
-                        onChange={async (event) => {
-                          const file = event.target.files?.[0]
-                          const encoded = file ? await fileToDataUrl(file) : ""
+            <div className="space-y-4 rounded-2xl border border-stone-200 bg-white p-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-stone-900">Things you did</h2>
+                <Button type="button" variant="outline" className="rounded-full" onClick={() => addStop("activity")}>
+                  <Plus className="mr-1 h-4 w-4" />
+                  Add activity
+                </Button>
+              </div>
 
-                          setActivityDrafts((current) => ({
-                            ...current,
-                            [trip.trip_id]: {
-                              ...(current[trip.trip_id] || emptyActivityDraft),
-                              thumbnail_url: encoded,
-                            },
-                          }))
-                        }}
+              {activities.length === 0 ? (
+                <p className="text-sm text-stone-500">Add museums, hikes, restaurants, or events.</p>
+              ) : null}
+
+              <div className="space-y-4">
+                {activities.map((stop, index) => (
+                  <div key={stop.id} className="rounded-xl border border-stone-200 bg-stone-50/80 p-4">
+                    <div className="mb-3 flex items-center justify-between">
+                      <p className="text-sm font-semibold text-stone-700">Activity #{index + 1}</p>
+                      <button
+                        type="button"
+                        onClick={() => removeStop("activity", stop.id)}
+                        className="rounded-full p-1 text-stone-400 transition-colors hover:bg-white hover:text-stone-700"
+                        aria-label="Remove activity"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+
+                    <div className="grid gap-3">
+                      <Input
+                        value={stop.title}
+                        onChange={(event) => updateStop("activity", stop.id, { title: event.target.value })}
+                        placeholder="Name this activity"
                       />
-                      {(activityDrafts[trip.trip_id] || emptyActivityDraft).thumbnail_url ? (
-                        <p className="text-xs text-muted-foreground">Image selected</p>
-                      ) : null}
+
+                      <PlacePicker
+                        label="Location"
+                        placeholder="Search where this activity was"
+                        value={stop.location}
+                        onChange={(location) => updateStop("activity", stop.id, { location })}
+                      />
+
                       <Textarea
-                        value={(activityDrafts[trip.trip_id] || emptyActivityDraft).description}
-                        onChange={(event) =>
-                          setActivityDrafts((current) => ({
-                            ...current,
-                            [trip.trip_id]: {
-                              ...(current[trip.trip_id] || emptyActivityDraft),
-                              description: event.target.value,
-                            },
-                          }))
-                        }
-                        placeholder="Description"
+                        value={stop.notes}
+                        rows={3}
+                        onChange={(event) => updateStop("activity", stop.id, { notes: event.target.value })}
+                        placeholder="What should people know before going?"
+                        className="resize-none"
                       />
-                      <div className="grid gap-2 sm:grid-cols-3">
+
+                      <div className="grid gap-3 sm:grid-cols-2">
                         <Input
-                          value={(activityDrafts[trip.trip_id] || emptyActivityDraft).latitude}
-                          onChange={(event) =>
-                            setActivityDrafts((current) => ({
-                              ...current,
-                              [trip.trip_id]: { ...(current[trip.trip_id] || emptyActivityDraft), latitude: event.target.value },
-                            }))
-                          }
-                          placeholder="Latitude"
-                        />
-                        <Input
-                          value={(activityDrafts[trip.trip_id] || emptyActivityDraft).longitude}
-                          onChange={(event) =>
-                            setActivityDrafts((current) => ({
-                              ...current,
-                              [trip.trip_id]: { ...(current[trip.trip_id] || emptyActivityDraft), longitude: event.target.value },
-                            }))
-                          }
-                          placeholder="Longitude"
-                        />
-                        <Input
-                          value={(activityDrafts[trip.trip_id] || emptyActivityDraft).cost}
-                          onChange={(event) =>
-                            setActivityDrafts((current) => ({
-                              ...current,
-                              [trip.trip_id]: { ...(current[trip.trip_id] || emptyActivityDraft), cost: event.target.value },
-                            }))
-                          }
+                          value={stop.cost}
+                          onChange={(event) => updateStop("activity", stop.id, { cost: event.target.value })}
                           placeholder="Cost"
                         />
-                      </div>
-                      <div className="flex gap-2">
-                        <Button type="button" onClick={() => addActivity(trip.trip_id)}>
-                          Save Activity
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => setShowActivityFormByTrip((current) => ({ ...current, [trip.trip_id]: false }))}
-                        >
-                          Cancel
-                        </Button>
+                        <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-md border border-stone-200 bg-white px-3 py-2 text-sm text-stone-600 transition-colors hover:bg-stone-100">
+                          <ImagePlus className="h-4 w-4 text-amber-700" />
+                          Add photo
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="sr-only"
+                            onChange={async (event) => {
+                              const file = event.target.files?.[0];
+                              if (!file) {
+                                updateStop("activity", stop.id, { imageUrl: "" });
+                                return;
+                              }
+                              const dataUrl = await fileToDataUrl(file);
+                              updateStop("activity", stop.id, { imageUrl: dataUrl });
+                            }}
+                          />
+                        </label>
                       </div>
                     </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {error ? <p className="text-sm font-medium text-red-600">{error}</p> : null}
+
+            <div className="flex flex-wrap gap-3">
+              <Button
+                type="button"
+                className="rounded-full bg-amber-600 px-6 hover:bg-amber-700"
+                onClick={() => void handleCreateTrip()}
+                disabled={isSavingTrip}
+              >
+                {isSavingTrip ? "Posting..." : "Post Trip"}
+              </Button>
+            </div>
+          </div>
+        </section>
+
+        <aside className="w-full lg:w-1/3 lg:self-start">
+          <div className="rounded-3xl border border-stone-200/80 bg-white/90 p-4 shadow-xl shadow-stone-200/30 backdrop-blur-sm lg:sticky lg:top-0">
+            <p className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-amber-700">
+              <Sparkles className="h-3.5 w-3.5" />
+              Live Preview
+            </p>
+
+            <div className="overflow-hidden rounded-2xl border border-stone-200 bg-stone-100">
+              <div
+                className="relative h-56 w-full bg-cover bg-center"
+                style={{ backgroundImage: `url(${coverImage || BANNER_PLACEHOLDER})` }}
+              >
+                <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
+                <div className="absolute bottom-4 left-4 right-4 text-white">
+                  <p className="text-xs uppercase tracking-[0.18em] text-white/80">{formatPreviewDate(date)}</p>
+                  <h2 className="mt-1 text-2xl font-semibold leading-tight">{title || "Your trip title"}</h2>
+                  <p className="mt-2 flex items-center gap-1 text-sm text-white/85">
+                    <MapPin className="h-3.5 w-3.5" />
+                    {tripLocation?.label || "Pick a primary location"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-4 p-4">
+                <p className="text-sm leading-relaxed text-stone-700">
+                  {description || "Your trip story preview appears here as you write."}
+                </p>
+
+                <div className="flex flex-wrap gap-2">
+                  {selectedTags.length > 0 ? (
+                    selectedTags.map((tag) => (
+                      <span key={tag} className="rounded-full bg-stone-900 px-2.5 py-1 text-[11px] font-medium text-white">
+                        {tag}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-xs text-stone-500">No tags yet.</span>
                   )}
-                  <ul className="space-y-1 text-sm text-muted-foreground">
-                    {trip.activities.map((activity) => (
-                      <li key={activity.activity_id}>• {activity.title || "Untitled activity"}</li>
-                    ))}
-                    {trip.activities.length === 0 ? <li>No activities added yet.</li> : null}
-                  </ul>
                 </div>
 
-                <div className="space-y-3 md:col-span-2">
-                  <h3 className="text-sm font-medium">Comments</h3>
-                  <ul className="space-y-1 text-sm text-muted-foreground">
-                    {trip.comments.map((comment) => (
-                      <li key={comment.comment_id}>
-                        • {comment.body} ({new Date(comment.created_at).toLocaleString()})
-                      </li>
-                    ))}
-                    {trip.comments.length === 0 ? <li>No comments yet.</li> : null}
-                  </ul>
+                <div className="space-y-3 text-sm">
+                  <div>
+                    <p className="font-semibold text-stone-800">Stays ({lodgings.length})</p>
+                    {lodgings.length > 0 ? (
+                      <ul className="mt-1 space-y-1 text-stone-600">
+                        {lodgings.map((stop) => (
+                          <li key={stop.id}>{stop.title || "Untitled stay"}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="mt-1 text-stone-500">No stays added.</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <p className="font-semibold text-stone-800">Activities ({activities.length})</p>
+                    {activities.length > 0 ? (
+                      <ul className="mt-1 space-y-1 text-stone-600">
+                        {activities.map((stop) => (
+                          <li key={stop.id}>{stop.title || "Untitled activity"}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="mt-1 text-stone-500">No activities added.</p>
+                    )}
+                  </div>
                 </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+              </div>
+            </div>
+          </div>
+        </aside>
       </div>
     </main>
-  )
+  );
 }
