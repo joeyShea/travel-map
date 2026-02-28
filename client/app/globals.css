@@ -89,7 +89,23 @@
   }
 }
 
-/* Match Leaflet container background to CartoDB dark tile color so no white gaps appear */
+/* Match Leaflet container background to Jawg Sunny tile color so no gaps appear at low zoom */
 .leaflet-container {
-  background: #0f1117;
+  background: #d4e8f0;
+}
+
+/* Signup page – flip-up word animation */
+@keyframes flip-word-out {
+  from { transform: translateY(0); }
+  to   { transform: translateY(-115%); }
+}
+@keyframes flip-word-in {
+  from { transform: translateY(115%); }
+  to   { transform: translateY(0); }
+}
+.flip-word-out {
+  animation: flip-word-out 0.18s ease-in forwards;
+}
+.flip-word-in {
+  animation: flip-word-in 0.18s ease-out forwards;
 }

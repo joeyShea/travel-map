@@ -1,5 +1,5 @@
-import TravelMap from "@/components/travel-map"
+import { redirect } from "next/navigation";
 
 export default function Page() {
-  return <TravelMap />
+    redirect("/signup");
 }
