@@ -1,114 +1,200 @@
 import os
-from flask import Flask, redirect, url_for, session
-from authlib.integrations.flask_client import OAuth
+
+import bcrypt
 import psycopg2
 from dotenv import load_dotenv
+from flask import Flask, jsonify, request, session
 
-# Load env
 load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = os.getenv("SECRET_KEY")
+app.secret_key = os.getenv("SECRET_KEY", "dev-secret")
+CLIENT_APP_URL = os.getenv("CLIENT_APP_URL", "http://localhost:3000")
 
-# PostgreSQL connection
 conn = psycopg2.connect(
     host=os.getenv("POSTGRES_HOST"),
+    port=5432,
     dbname=os.getenv("POSTGRES_DB"),
     user=os.getenv("POSTGRES_USER"),
     password=os.getenv("POSTGRES_PASSWORD"),
+    sslmode="require",
 )
 
-# OAuth setup for Cognito
-oauth = OAuth(app)
-COGNITO_URL = f"https://cognito-idp.{os.getenv('COGNITO_REGION')}.amazonaws.com/{os.getenv('COGNITO_USER_POOL_ID')}"
 
-oauth.register(
-    name='oidc',
-    authority=COGNITO_URL,
-    client_id=os.getenv("COGNITO_CLIENT_ID"),
-    client_secret=os.getenv("COGNITO_CLIENT_SECRET"),
-    server_metadata_url=f"{COGNITO_URL}/.well-known/openid-configuration",
-    client_kwargs={'scope': 'openid email profile'}
-)
+@app.after_request
+def add_cors_headers(response):
+    response.headers["Access-Control-Allow-Origin"] = CLIENT_APP_URL
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    return response
 
-# -----------------------------
-# Routes
-# -----------------------------
 
-@app.route('/')
-def index():
-    user = session.get('user')
-    if user:
-        return f'Hello, {user["email"]}. <a href="/logout">Logout</a>'
-    else:
-        return f'Welcome! Please <a href="/login">Login</a>.'
+def _safe_user_row_to_json(row):
+    return {
+        "user_id": row["user_id"],
+        "name": row["name"],
+        "email": row["email"],
+    }
 
-@app.route('/login')
-def login():
-    redirect_uri = url_for('authorize', _external=True)
-    return oauth.oidc.authorize_redirect(redirect_uri)
 
-@app.route('/authorize')
-def authorize():
-    # Get token + user info from Cognito
-    token = oauth.oidc.authorize_access_token()
-    user_info = token['userinfo']
-    session['user'] = user_info
-
-    # Auto-create traveler in Postgres
-    cognito_sub = user_info['sub']
-    email = user_info.get('email')
-    name = user_info.get('name')
-
+def _get_user_by_email(email: str):
     cur = conn.cursor()
-    cur.execute("SELECT user_id FROM travelers WHERE cognito_sub=%s", (cognito_sub,))
+    cur.execute(
+        """
+        SELECT user_id, name, email, password_hash
+        FROM travelers
+        WHERE email=%s
+        LIMIT 1
+        """,
+        (email,),
+    )
     row = cur.fetchone()
+    cur.close()
     if not row:
+        return None
+    return {
+        "user_id": row[0],
+        "name": row[1],
+        "email": row[2],
+        "password_hash": row[3],
+    }
+
+
+@app.route("/", methods=["GET"])
+def health():
+    return jsonify({"status": "ok"}), 200
+
+
+@app.route("/create-user", methods=["POST", "OPTIONS"])
+def create_user():
+    if request.method == "OPTIONS":
+        return ("", 204)
+
+    try:
+        payload = request.get_json(silent=True) or request.form
+        email = (payload.get("email") or "").strip().lower()
+        password = payload.get("password") or ""
+        name = (payload.get("name") or "").strip() or email.split("@")[0]
+
+        if not email or not password:
+            return jsonify({"error": "email and password are required"}), 400
+        if len(password) < 8:
+            return jsonify({"error": "password must be at least 8 characters"}), 400
+
+        password_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+        cur = conn.cursor()
+        cur.execute("SELECT user_id FROM travelers WHERE email=%s", (email,))
+        existing = cur.fetchone()
+        if existing:
+            cur.close()
+            return jsonify({"error": "user already exists"}), 409
+
         cur.execute(
             """
-            INSERT INTO travelers (cognito_sub, name, email)
-            VALUES (%s, %s, %s)
+            INSERT INTO travelers (name, email, password_hash, verified)
+            VALUES (%s, %s, %s, FALSE)
             RETURNING user_id
             """,
-            (cognito_sub, name, email)
+            (name, email, password_hash),
         )
+        created = cur.fetchone()
         conn.commit()
-        user_id = cur.fetchone()[0]
-    else:
-        user_id = row[0]
+        cur.close()
 
-    cur.close()
-    # store user_id in session if needed
-    session['user_id'] = user_id
+        if not created:
+            return jsonify({"error": "failed to create user"}), 500
 
-    return redirect(url_for('index'))
+        session["user_id"] = created[0]
+        session["email"] = email
 
-@app.route('/logout')
+        return jsonify({"message": "user created", "user_id": created[0], "email": email}), 201
+
+    except Exception as error:
+        conn.rollback()
+        app.logger.exception("Create user failed")
+        return jsonify({"error": f"create user failed: {str(error)}"}), 500
+
+
+@app.route("/login", methods=["POST", "OPTIONS"])
+def login_user():
+    if request.method == "OPTIONS":
+        return ("", 204)
+
+    try:
+        payload = request.get_json(silent=True) or request.form
+        email = (payload.get("email") or "").strip().lower()
+        password = payload.get("password") or ""
+
+        if not email or not password:
+            return jsonify({"error": "email and password are required"}), 400
+
+        user = _get_user_by_email(email)
+        if not user:
+            return jsonify({"error": "invalid email or password"}), 401
+
+        password_hash = user.get("password_hash") or ""
+        if not password_hash:
+            return jsonify({"error": "invalid email or password"}), 401
+
+        password_valid = bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
+        if not password_valid:
+            return jsonify({"error": "invalid email or password"}), 401
+
+        session["user_id"] = user["user_id"]
+        session["email"] = user["email"]
+
+        return jsonify(
+            {
+                "message": "logged in",
+                "user": {
+                    "user_id": user["user_id"],
+                    "name": user["name"],
+                    "email": user["email"],
+                },
+            }
+        ), 200
+    except Exception as error:
+        app.logger.exception("Login failed")
+        return jsonify({"error": f"login failed: {str(error)}"}), 500
+
+
+@app.route("/me", methods=["GET", "OPTIONS"])
+def me():
+    if request.method == "OPTIONS":
+        return ("", 204)
+
+    user_id = session.get("user_id")
+    email = session.get("email")
+    if not user_id or not email:
+        return jsonify({"authenticated": False}), 401
+
+    user = _get_user_by_email(email)
+    if not user or user["user_id"] != user_id:
+        session.clear()
+        return jsonify({"authenticated": False}), 401
+
+    return jsonify(
+        {
+            "authenticated": True,
+            "user": {
+                "user_id": user["user_id"],
+                "name": user["name"],
+                "email": user["email"],
+            },
+        }
+    ), 200
+
+
+@app.route("/logout", methods=["POST", "OPTIONS"])
 def logout():
-    session.pop('user', None)
-    session.pop('user_id', None)
-    return redirect(url_for('index'))
+    if request.method == "OPTIONS":
+        return ("", 204)
 
-# -----------------------------
-# Protected route example
-# -----------------------------
-@app.route('/my_trips')
-def my_trips():
-    user_id = session.get('user_id')
-    if not user_id:
-        return redirect(url_for('login'))
-    cur = conn.cursor()
-    cur.execute("SELECT trip_id, title FROM trips WHERE owner_user_id=%s", (user_id,))
-    trips = cur.fetchall()
-    cur.close()
-    html = "<h1>My Trips</h1><ul>"
-    for trip in trips:
-        html += f"<li>{trip[1]} (ID: {trip[0]})</li>"
-    html += "</ul>"
-    return html
+    session.clear()
+    return jsonify({"message": "logged out"}), 200
 
-# -----------------------------
-# Run App
-# -----------------------------
-if __name__ == '__main__':
-    app.run(debug=True)
+
+if __name__ == "__main__":
+    app.run(debug=True, port=int(os.getenv("PORT", "5001")))
