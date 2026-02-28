@@ -120,7 +120,7 @@ export const travelReviews: TravelReview[] = [
       },
       {
         id: "lincoln-dish",
-        title: "The Dish",
+        title: "Dish",
         description:
           "One of Lincoln's most beloved local spots. Relaxed atmosphere, creative menu, and the kind of place where the staff actually knows the regulars. Go for brunch if you can.",
         image: "/images/dish-resturant.jpg",

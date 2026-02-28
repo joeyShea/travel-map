@@ -22,7 +22,7 @@ export default function Page() {
         })
 
         if (!response.ok) {
-          router.replace("/login")
+          router.replace("/signup")
           return
         }
 
@@ -30,7 +30,7 @@ export default function Page() {
           setReady(true)
         }
       } catch {
-        router.replace("/login")
+        router.replace("/signup")
       }
     }
 

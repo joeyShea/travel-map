@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { MapPin, GraduationCap, Globe } from "lucide-react";
 
+const API_BASE_URL = "http://localhost:5001";
+
 type AccountType = "traveler" | "student";
 type Mode = "signup" | "signin";
 type AnimPhase = "idle" | "out" | "in";
@@ -15,15 +17,63 @@ export default function SignUpPage() {
     const [displayedType, setDisplayedType] = useState<AccountType>("traveler");
     const [animPhase, setAnimPhase] = useState<AnimPhase>("idle");
     const [form, setForm] = useState({ name: "", email: "", password: "" });
+    const [error, setError] = useState("");
+    const [isLoading, setIsLoading] = useState(false);
+
+    const isSignup = mode === "signup";
+    const isStudent = isSignup && accountType === "student";
 
     function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
         setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
     }
 
-    function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    async function loginWithCredentials(email: string, password: string): Promise<boolean> {
+        const response = await fetch(`${API_BASE_URL}/login`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ email, password }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            setError(data.error || "Invalid email or password");
+            return false;
+        }
+        return true;
+    }
+
+    async function handleSubmit(e: React.SyntheticEvent<HTMLFormElement>) {
         e.preventDefault();
-        // TODO: wire up to real auth (check email → sign in or sign up)
-        router.push("/map");
+        setError("");
+        setIsLoading(true);
+
+        try {
+            if (isSignup) {
+                const response = await fetch(`${API_BASE_URL}/create-user`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    credentials: "include",
+                    body: JSON.stringify({ name: form.name, email: form.email, password: form.password }),
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    setError(data.error || "Could not create account");
+                    return;
+                }
+                const didLogin = await loginWithCredentials(form.email, form.password);
+                if (!didLogin) return;
+            } else {
+                const didLogin = await loginWithCredentials(form.email, form.password);
+                if (!didLogin) return;
+            }
+
+            router.push("/");
+            router.refresh();
+        } catch {
+            setError("Could not reach server. Make sure the server is running.");
+        } finally {
+            setIsLoading(false);
+        }
     }
 
     function selectAccountType(type: AccountType) {
@@ -44,10 +94,25 @@ export default function SignUpPage() {
     const wordClass = animPhase === "out" ? "flip-word-out" : animPhase === "in" ? "flip-word-in" : "";
 
     const inputBase =
-        "w-full rounded-lg border border-stone-200 bg-white/60 px-4 py-3 text-sm text-stone-800 placeholder:text-stone-400 outline-none transition-colors focus:border-amber-400 focus:ring-1 focus:ring-amber-300";
+        "w-full rounded-lg border border-stone-200 bg-white/60 px-4 py-3 text-sm text-stone-800 placeholder:text-stone-400 outline-none transition-colors focus:border-amber-400 focus:ring-1 focus:ring-amber-300 disabled:opacity-50";
+
+    // Smoothly collapses an element's layout height to zero without leaving
+    // phantom space behind. The inner child must have overflow: hidden.
+    const collapseStyle = (open: boolean): React.CSSProperties => ({
+        display: "grid",
+        gridTemplateRows: open ? "1fr" : "0fr",
+        opacity: open ? 1 : 0,
+        transition: "grid-template-rows 280ms ease, opacity 280ms ease",
+    });
 
     return (
-        <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-[#fdf8f0] px-6 py-16">
+        /*
+         * Two-row CSS grid: top half holds the heading/toggle (anchored to the
+         * bottom of its row), bottom half holds the form (anchored to the top
+         * of its row). They meet at the vertical midpoint. Form height changes
+         * grow downward only — the heading never moves.
+         */
+        <div className="relative grid min-h-screen grid-rows-2 overflow-hidden bg-[#fdf8f0] px-6">
             {/* Decorative travel paths */}
             <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
                 <svg className="absolute -left-8 top-8 opacity-[0.30]" width="280" height="200" fill="none">
@@ -92,45 +157,66 @@ export default function SignUpPage() {
                 </svg>
             </div>
 
-            {/* Logo */}
-            <div className="mb-12 flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500 shadow-sm">
-                    <MapPin className="h-5 w-5 text-white" />
+            {/* ── TOP HALF: logo · heading · toggle · subtitle ─────────────────
+                justify-end pins everything to the bottom of this row so the
+                heading always sits at the exact vertical midpoint of the page. */}
+            <div className="flex flex-col items-center justify-end pb-10">
+                {/* Logo */}
+                <div className="mb-10 flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500 shadow-sm">
+                        <MapPin className="h-5 w-5 text-white" />
+                    </div>
+                    <span className="text-lg font-semibold tracking-tight text-stone-800">Travel Map</span>
                 </div>
-                <span className="text-lg font-semibold tracking-tight text-stone-800">Travel Map</span>
-            </div>
 
-            {/* Hero heading */}
-            {mode === "signup" ? (
-                <h1 className="text-center text-5xl font-bold tracking-tight text-stone-900 sm:text-6xl md:text-7xl">
-                    You are a{" "}
-                    <span className="relative inline-block">
-                        {/* overflow-hidden clips the word as it slides up/down */}
-                        <button
-                            type="button"
-                            onClick={toggleWord}
-                            className="inline-block overflow-hidden text-amber-600 cursor-pointer hover:opacity-75 transition-opacity"
-                            style={{ verticalAlign: "bottom" }}
-                            aria-label="Toggle account type"
-                        >
-                            <span className={`inline-block ${wordClass}`}>{displayedType}</span>
-                        </button>
-                        <span className="absolute -bottom-1 left-0 right-0 h-px bg-amber-300/70" />
-                    </span>
-                    .
-                </h1>
-            ) : (
-                <h1 className="text-center text-5xl font-bold tracking-tight text-stone-900 sm:text-6xl md:text-7xl">
-                    Welcome back.
-                </h1>
-            )}
+                {/* Hero heading — signup h1 is the layout anchor; signin h1
+                    crossfades in as an absolute overlay so width/height stay fixed. */}
+                <div className="relative w-full text-center">
+                    <h1
+                        className={`text-5xl font-bold tracking-tight text-stone-900 sm:text-6xl md:text-7xl transition-opacity duration-300 ease-in-out ${
+                            isSignup ? "opacity-100" : "opacity-0 pointer-events-none select-none"
+                        }`}
+                    >
+                        You are a{" "}
+                        <span className="relative inline-block">
+                            <button
+                                type="button"
+                                onClick={toggleWord}
+                                disabled={!isSignup}
+                                tabIndex={isSignup ? 0 : -1}
+                                className="inline-block overflow-hidden text-amber-600 cursor-pointer hover:opacity-75 transition-opacity"
+                                style={{ verticalAlign: "bottom" }}
+                                aria-label="Toggle account type"
+                            >
+                                <span className={`inline-block ${wordClass}`}>{displayedType}</span>
+                            </button>
+                            <span className="absolute -bottom-1 left-0 right-0 h-px bg-amber-300/70" />
+                        </span>
+                        .
+                    </h1>
+                    <div
+                        className={`absolute inset-0 flex items-center justify-center transition-opacity duration-300 ease-in-out ${
+                            !isSignup ? "opacity-100" : "opacity-0 pointer-events-none"
+                        }`}
+                    >
+                        <h1 className="text-5xl font-bold tracking-tight text-stone-900 sm:text-6xl md:text-7xl">
+                            Welcome back.
+                        </h1>
+                    </div>
+                </div>
 
-            {/* Account type toggle – signup only */}
-            {mode === "signup" && (
-                <div className="mt-6 flex gap-2">
+                {/* Account type toggle — opacity-only so it always holds its
+                    height, keeping the heading pinned even as mode changes. */}
+                <div
+                    className={`mt-6 flex gap-2 transition-opacity duration-300 ease-in-out ${
+                        isSignup ? "opacity-100" : "opacity-0 pointer-events-none select-none"
+                    }`}
+                    aria-hidden={!isSignup}
+                >
                     <button
                         type="button"
                         onClick={() => selectAccountType("traveler")}
+                        tabIndex={isSignup ? 0 : -1}
                         className={`flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-medium transition-all duration-200 ${
                             accountType === "traveler"
                                 ? "bg-amber-500 text-white shadow-sm"
@@ -143,6 +229,7 @@ export default function SignUpPage() {
                     <button
                         type="button"
                         onClick={() => selectAccountType("student")}
+                        tabIndex={isSignup ? 0 : -1}
                         className={`flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-medium transition-all duration-200 ${
                             accountType === "student"
                                 ? "bg-amber-500 text-white shadow-sm"
@@ -153,83 +240,124 @@ export default function SignUpPage() {
                         Student
                     </button>
                 </div>
-            )}
 
-            <p className="mt-3 text-sm text-stone-400">
-                {mode === "signin"
-                    ? "Enter your email and password to continue."
-                    : accountType === "traveler"
-                      ? "Explore destinations, trips, and activities."
-                      : "Write reviews and plan your next adventure."}
-            </p>
+                <p className="mt-3 text-sm text-stone-400">
+                    {mode === "signin"
+                        ? "Enter your email and password to continue."
+                        : accountType === "traveler"
+                          ? "Explore destinations, trips, and activities."
+                          : "Write reviews and plan your next adventure."}
+                </p>
+            </div>
 
-            {/* Form */}
-            <form onSubmit={handleSubmit} className="mt-10 flex w-full max-w-sm flex-col gap-4">
-                {mode === "signup" && (
+            {/* ── BOTTOM HALF: form inputs ──────────────────────────────────────
+                justify-start pins the form to the top of this row. Height
+                changes grow downward, never touching the heading above. */}
+            <div className="flex flex-col items-center justify-start pt-10">
+                <form onSubmit={handleSubmit} className="flex w-full max-w-sm flex-col">
+                    {/* Name field — collapses height + margin when in signin */}
+                    <div
+                        style={{
+                            ...collapseStyle(isSignup),
+                            marginBottom: isSignup ? "1rem" : "0",
+                            transition:
+                                "grid-template-rows 280ms ease, opacity 280ms ease, margin-bottom 280ms ease",
+                        }}
+                    >
+                        <div style={{ overflow: "hidden" }}>
+                            <input
+                                name="name"
+                                type="text"
+                                autoComplete="name"
+                                required={isSignup}
+                                disabled={!isSignup || isLoading}
+                                tabIndex={isSignup ? 0 : -1}
+                                value={form.name}
+                                onChange={handleChange}
+                                placeholder="Full name"
+                                className={inputBase}
+                            />
+                        </div>
+                    </div>
+
+                    {/* Email + .edu notice */}
+                    <div className="mb-4 flex flex-col">
+                        <input
+                            name="email"
+                            type="email"
+                            autoComplete="email"
+                            required
+                            disabled={isLoading}
+                            value={form.email}
+                            onChange={handleChange}
+                            placeholder={isStudent ? "University email (.edu)" : "Email"}
+                            className={inputBase}
+                        />
+                        {/* .edu notice — collapses when not student */}
+                        <div style={collapseStyle(isStudent)}>
+                            <div style={{ overflow: "hidden", paddingTop: "4px" }}>
+                                <p className="flex items-center gap-1 px-1 text-xs text-amber-600">
+                                    <GraduationCap className="h-3 w-3 shrink-0" />
+                                    A .edu email address is required for student accounts.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
                     <input
-                        name="name"
-                        type="text"
-                        autoComplete="name"
+                        name="password"
+                        type="password"
+                        autoComplete={isSignup ? "new-password" : "current-password"}
                         required
-                        value={form.name}
+                        disabled={isLoading}
+                        value={form.password}
                         onChange={handleChange}
-                        placeholder="Full name"
-                        className={inputBase}
+                        placeholder="Password"
+                        className={`${inputBase} mb-4`}
                     />
-                )}
-                <input
-                    name="email"
-                    type="email"
-                    autoComplete="email"
-                    required
-                    value={form.email}
-                    onChange={handleChange}
-                    placeholder="Email"
-                    className={inputBase}
-                />
-                <input
-                    name="password"
-                    type="password"
-                    autoComplete={mode === "signup" ? "new-password" : "current-password"}
-                    required
-                    value={form.password}
-                    onChange={handleChange}
-                    placeholder="Password"
-                    className={inputBase}
-                />
-                <button
-                    type="submit"
-                    className="mt-2 w-full rounded-lg bg-amber-500 px-4 py-3 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
-                >
-                    {mode === "signup" ? "Get started" : "Sign in"}
-                </button>
-            </form>
 
-            <p className="mt-6 text-sm text-stone-400">
-                {mode === "signup" ? (
-                    <>
-                        Already have an account?{" "}
-                        <button
-                            type="button"
-                            onClick={() => setMode("signin")}
-                            className="text-amber-600 hover:underline underline-offset-4"
-                        >
-                            Sign in
-                        </button>
-                    </>
-                ) : (
-                    <>
-                        New here?{" "}
-                        <button
-                            type="button"
-                            onClick={() => setMode("signup")}
-                            className="text-amber-600 hover:underline underline-offset-4"
-                        >
-                            Create an account
-                        </button>
-                    </>
-                )}
-            </p>
+                    {/* Error message — collapses when empty */}
+                    <div style={{ ...collapseStyle(!!error), marginBottom: error ? "0.75rem" : "0", transition: "grid-template-rows 200ms ease, opacity 200ms ease, margin-bottom 200ms ease" }}>
+                        <div style={{ overflow: "hidden" }}>
+                            <p className="px-1 text-xs text-red-500">{error}</p>
+                        </div>
+                    </div>
+
+                    <button
+                        type="submit"
+                        disabled={isLoading}
+                        className="w-full rounded-lg bg-amber-500 px-4 py-3 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90 disabled:opacity-60"
+                    >
+                        {isLoading ? "Please wait…" : isSignup ? "Get started" : "Sign in"}
+                    </button>
+                </form>
+
+                <p className="mt-6 text-sm text-stone-400">
+                    {isSignup ? (
+                        <>
+                            Already have an account?{" "}
+                            <button
+                                type="button"
+                                onClick={() => { setMode("signin"); setError(""); }}
+                                className="text-amber-600 hover:underline underline-offset-4"
+                            >
+                                Sign in
+                            </button>
+                        </>
+                    ) : (
+                        <>
+                            New here?{" "}
+                            <button
+                                type="button"
+                                onClick={() => { setMode("signup"); setError(""); }}
+                                className="text-amber-600 hover:underline underline-offset-4"
+                            >
+                                Create an account
+                            </button>
+                        </>
+                    )}
+                </p>
+            </div>
         </div>
     );
 }
