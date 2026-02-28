@@ -31,9 +31,15 @@ export default function MapView({
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return
 
+    // Extended bounds to cover continental US + Alaska + Hawaii
+    const usBounds = L.latLngBounds([18, -180], [72, -60])
+
     const map = L.map(mapContainerRef.current, {
-      center: [30, 10],
-      zoom: 3,
+      center: [39.5, -98.35],
+      zoom: 5,
+      minZoom: 4,
+      maxBounds: usBounds,
+      maxBoundsViscosity: 1.0,
       zoomControl: false,
       attributionControl: false,
     })
@@ -42,6 +48,8 @@ export default function MapView({
       "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
       {
         maxZoom: 19,
+        minZoom: 4,
+        bounds: usBounds,
       }
     ).addTo(map)
 
@@ -50,7 +58,25 @@ export default function MapView({
 
     mapRef.current = map
 
+    let cancelled = false
+
+    // Fly to user's current location if available
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          if (cancelled) return
+          map.flyTo([pos.coords.latitude, pos.coords.longitude], 10, {
+            duration: 1.5,
+          })
+        },
+        () => {
+          // Permission denied or unavailable — stay on US default
+        }
+      )
+    }
+
     return () => {
+      cancelled = true
       map.remove()
       mapRef.current = null
     }
@@ -195,7 +221,7 @@ export default function MapView({
         maxZoom: 12,
       })
     } else if (!selectedReview) {
-      map.flyTo([30, 10], 3, { duration: 1.5 })
+      map.flyTo([39.5, -98.35], 5, { duration: 1.5 })
     }
   }, [fullScreenReview, selectedReview])
 
@@ -205,7 +231,7 @@ export default function MapView({
     if (!map || fullScreenReview) return
 
     if (selectedReview) {
-      map.flyTo([selectedReview.lat, selectedReview.lng], 6, {
+      map.flyTo([selectedReview.lat, selectedReview.lng], 11, {
         duration: 1.2,
       })
     }
