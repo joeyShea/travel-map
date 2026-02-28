@@ -88,3 +88,8 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Match Leaflet container background to CartoDB dark tile color so no white gaps appear */
+.leaflet-container {
+  background: #0f1117;
+}
