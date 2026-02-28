@@ -1,9 +1,10 @@
 TRAVEL DATA STRUCTURES (POSTGRESQL)
 
 Notes
-- Lists in app models are represented as join tables in SQL.
+- Lists in app models are represented with either join tables (many-to-many) or foreign keys (one-to-many).
 - coords are split into latitude and longitude.
 - user_trip_ids is derived from trips.owner_user_id.
+- activity_ids and lodging_ids are derived from activities.trip_id and lodgings.trip_id.
 
 
 Traveler
@@ -65,6 +66,7 @@ CREATE TABLE trips (
 
 Lodging
 - lodge_id: int
+- trip_id: int
 - address: str
 - thumbnail: Image
 - title: str
@@ -75,6 +77,7 @@ Lodging
 SQL
 CREATE TABLE lodgings (
 	lodge_id SERIAL PRIMARY KEY,
+	trip_id INT NOT NULL REFERENCES trips(trip_id) ON DELETE CASCADE,
 	address TEXT,
 	thumbnail_url TEXT,
 	title VARCHAR(255),
@@ -87,6 +90,7 @@ CREATE TABLE lodgings (
 
 Activity
 - activity_id: int
+- trip_id: int
 - address: str
 - thumbnail: Image
 - title: str
@@ -98,6 +102,7 @@ Activity
 SQL
 CREATE TABLE activities (
 	activity_id SERIAL PRIMARY KEY,
+	trip_id INT NOT NULL REFERENCES trips(trip_id) ON DELETE CASCADE,
 	address TEXT,
 	thumbnail_url TEXT,
 	title VARCHAR(255),
@@ -127,22 +132,6 @@ CREATE TABLE comments (
 
 
 RELATIONSHIP TABLES (MANY-TO-MANY)
-
-Trip <-> Activity
-SQL
-CREATE TABLE trip_activities (
-	trip_id INT REFERENCES trips(trip_id) ON DELETE CASCADE,
-	activity_id INT REFERENCES activities(activity_id) ON DELETE CASCADE,
-	PRIMARY KEY (trip_id, activity_id)
-);
-
-Trip <-> Lodging
-SQL
-CREATE TABLE trip_lodgings (
-	trip_id INT REFERENCES trips(trip_id) ON DELETE CASCADE,
-	lodge_id INT REFERENCES lodgings(lodge_id) ON DELETE CASCADE,
-	PRIMARY KEY (trip_id, lodge_id)
-);
 
 Traveler <-> Favorited Trips
 SQL
@@ -175,3 +164,29 @@ CREATE TABLE trip_tags (
 	tag VARCHAR(50) NOT NULL,
 	PRIMARY KEY (trip_id, tag)
 );
+
+WITH tags(tag) AS (
+  VALUES
+    ('beach'),
+    ('city'),
+    ('adventure'),
+    ('budget-friendly'),
+    ('luxury'),
+    ('foodie'),
+    ('nightlife'),
+    ('nature'),
+    ('cultural'),
+),
+trip_pool AS (
+  SELECT trip_id FROM trips
+)
+INSERT INTO trip_tags (trip_id, tag)
+SELECT tp.trip_id, t.tag
+FROM trip_pool tp
+JOIN LATERAL (
+  SELECT tag
+  FROM tags
+  ORDER BY random()
+  LIMIT 2
+) t ON TRUE
+ON CONFLICT (trip_id, tag) DO NOTHING;
