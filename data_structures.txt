@@ -20,16 +20,16 @@ Traveler
 - favorited_traveler_ids: List[user_id]
 - planned_trip_ids: List[trip_id]
 
-SQL
+
 CREATE TABLE travelers (
-	user_id SERIAL PRIMARY KEY,
-	name VARCHAR(255) NOT NULL,
-	email VARCHAR(255) UNIQUE NOT NULL,
-	password_hash TEXT NOT NULL,
-	bio TEXT,
-	verified BOOLEAN DEFAULT FALSE,
-	college VARCHAR(255),
-	profile_image_url TEXT
+    user_id SERIAL PRIMARY KEY,
+    cognito_sub UUID UNIQUE NOT NULL,
+    name VARCHAR(255),
+    email VARCHAR(255) UNIQUE NOT NULL,
+    bio TEXT,
+    verified BOOLEAN DEFAULT FALSE,
+    college VARCHAR(255),
+    profile_image_url TEXT
 );
 
 
@@ -164,29 +164,3 @@ CREATE TABLE trip_tags (
 	tag VARCHAR(50) NOT NULL,
 	PRIMARY KEY (trip_id, tag)
 );
-
-WITH tags(tag) AS (
-  VALUES
-    ('beach'),
-    ('city'),
-    ('adventure'),
-    ('budget-friendly'),
-    ('luxury'),
-    ('foodie'),
-    ('nightlife'),
-    ('nature'),
-    ('cultural'),
-),
-trip_pool AS (
-  SELECT trip_id FROM trips
-)
-INSERT INTO trip_tags (trip_id, tag)
-SELECT tp.trip_id, t.tag
-FROM trip_pool tp
-JOIN LATERAL (
-  SELECT tag
-  FROM tags
-  ORDER BY random()
-  LIMIT 2
-) t ON TRUE
-ON CONFLICT (trip_id, tag) DO NOTHING;
