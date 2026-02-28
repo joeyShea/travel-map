@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { travelReviews, type TravelReview, type Activity } from "@/lib/travel-data";
 import SidebarPanel from "@/components/sidebar-panel";
 import FullScreenReview from "@/components/full-screen-review";
@@ -114,6 +115,14 @@ export default function TravelMap() {
                     <CircleUser className="h-5 w-5 text-foreground" />
                 </button>
             </div>
+            {/* TODO: this doesn't show rn */}
+            {/* <div className="absolute right-4 top-4 z-30">
+                <Link href="/trips">
+                    <Button variant="outline" size="sm">
+                        Add a trip
+                    </Button>
+                </Link>
+            </div> */}
 
             <div className="flex h-full w-full">
                 {/* Side panel */}

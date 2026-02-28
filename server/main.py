@@ -61,6 +61,27 @@ def _get_user_by_email(email: str):
     }
 
 
+def _to_nullable_string(value):
+    if value is None:
+        return None
+    value_as_string = str(value).strip()
+    return value_as_string if value_as_string else None
+
+
+def _require_authenticated_user():
+    user_id = session.get("user_id")
+    email = session.get("email")
+    if not user_id or not email:
+        return None
+
+    user = _get_user_by_email(email)
+    if not user or user["user_id"] != user_id:
+        session.clear()
+        return None
+
+    return user
+
+
 @app.route("/", methods=["GET"])
 def health():
     return jsonify({"status": "ok"}), 200
@@ -194,6 +215,182 @@ def logout():
 
     session.clear()
     return jsonify({"message": "logged out"}), 200
+
+
+@app.route("/trips", methods=["POST", "OPTIONS"])
+def create_trip_with_details():
+    if request.method == "OPTIONS":
+        return ("", 204)
+
+    authenticated_user = _require_authenticated_user()
+    if not authenticated_user:
+        return jsonify({"error": "authentication required"}), 401
+
+    payload = request.get_json(silent=True) or {}
+    title = _to_nullable_string(payload.get("title"))
+    if not title:
+        return jsonify({"error": "title is required"}), 400
+
+    lodgings = payload.get("lodgings") or []
+    activities = payload.get("activities") or []
+    tags = payload.get("tags") or []
+
+    if not isinstance(lodgings, list):
+        return jsonify({"error": "lodgings must be a list"}), 400
+    if not isinstance(activities, list):
+        return jsonify({"error": "activities must be a list"}), 400
+    if not isinstance(tags, list):
+        return jsonify({"error": "tags must be a list"}), 400
+
+    try:
+        cur = conn.cursor()
+
+        cur.execute(
+            """
+            INSERT INTO trips (
+                thumbnail_url,
+                title,
+                description,
+                latitude,
+                longitude,
+                cost,
+                duration,
+                date,
+                visibility,
+                owner_user_id
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING trip_id
+            """,
+            (
+                _to_nullable_string(payload.get("thumbnail_url")),
+                title,
+                _to_nullable_string(payload.get("description")),
+                _to_nullable_string(payload.get("latitude")),
+                _to_nullable_string(payload.get("longitude")),
+                _to_nullable_string(payload.get("cost")),
+                duration,
+                _to_nullable_string(payload.get("date")),
+                visibility,
+                authenticated_user["user_id"],
+            ),
+        )
+        created_trip = cur.fetchone()
+        if not created_trip:
+            cur.close()
+            conn.rollback()
+            return jsonify({"error": "failed to create trip"}), 500
+
+        trip_id = created_trip[0]
+
+        inserted_tags = []
+        for tag in tags:
+            clean_tag = _to_nullable_string(tag)
+            if not clean_tag:
+                continue
+
+            cur.execute(
+                """
+                INSERT INTO trip_tags (trip_id, tag)
+                VALUES (%s, %s)
+                ON CONFLICT (trip_id, tag) DO NOTHING
+                """,
+                (trip_id, clean_tag),
+            )
+            inserted_tags.append(clean_tag)
+
+        created_lodgings = []
+        for lodging in lodgings:
+            if not isinstance(lodging, dict):
+                continue
+
+            cur.execute(
+                """
+                INSERT INTO lodgings (
+                    trip_id,
+                    address,
+                    thumbnail_url,
+                    title,
+                    description,
+                    latitude,
+                    longitude,
+                    cost
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING lodge_id
+                """,
+                (
+                    trip_id,
+                    _to_nullable_string(lodging.get("address")),
+                    _to_nullable_string(lodging.get("thumbnail_url")),
+                    _to_nullable_string(lodging.get("title")),
+                    _to_nullable_string(lodging.get("description")),
+                    _to_nullable_string(lodging.get("latitude")),
+                    _to_nullable_string(lodging.get("longitude")),
+                    _to_nullable_string(lodging.get("cost")),
+                ),
+            )
+            lodging_id = cur.fetchone()
+            if lodging_id:
+                created_lodgings.append({"lodge_id": lodging_id[0]})
+
+        created_activities = []
+        for activity in activities:
+            if not isinstance(activity, dict):
+                continue
+
+            cur.execute(
+                """
+                INSERT INTO activities (
+                    trip_id,
+                    address,
+                    thumbnail_url,
+                    title,
+                    location,
+                    description,
+                    latitude,
+                    longitude,
+                    cost
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING activity_id
+                """,
+                (
+                    trip_id,
+                    _to_nullable_string(activity.get("address")),
+                    _to_nullable_string(activity.get("thumbnail_url")),
+                    _to_nullable_string(activity.get("title")),
+                    _to_nullable_string(activity.get("location")),
+                    _to_nullable_string(activity.get("description")),
+                    _to_nullable_string(activity.get("latitude")),
+                    _to_nullable_string(activity.get("longitude")),
+                    _to_nullable_string(activity.get("cost")),
+                ),
+            )
+            activity_id = cur.fetchone()
+            if activity_id:
+                created_activities.append({"activity_id": activity_id[0]})
+
+        conn.commit()
+        cur.close()
+
+        return (
+            jsonify(
+                {
+                    "message": "trip created",
+                    "trip_id": trip_id,
+                    "owner_user_id": authenticated_user["user_id"],
+                    "tags": inserted_tags,
+                    "lodgings": created_lodgings,
+                    "activities": created_activities,
+                }
+            ),
+            201,
+        )
+    except Exception as error:
+        conn.rollback()
+        app.logger.exception("Create trip failed")
+        return jsonify({"error": f"create trip failed: {str(error)}"}), 500
 
 
 if __name__ == "__main__":
