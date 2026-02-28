@@ -1,4 +1,10 @@
-TRAVEL DATA STRUCTURES
+TRAVEL DATA STRUCTURES (POSTGRESQL)
+
+Notes
+- Lists in app models are represented as join tables in SQL.
+- coords are split into latitude and longitude.
+- user_trip_ids is derived from trips.owner_user_id.
+
 
 Traveler
 - user_id: int
@@ -9,10 +15,22 @@ Traveler
 - verified: bool
 - college: str
 - profile_image: Image
-- user_trip_ids: List[trip_id]
 - favorited_trip_ids: List[trip_id]
 - favorited_traveler_ids: List[user_id]
 - planned_trip_ids: List[trip_id]
+
+SQL
+CREATE TABLE travelers (
+	user_id SERIAL PRIMARY KEY,
+	name VARCHAR(255) NOT NULL,
+	email VARCHAR(255) UNIQUE NOT NULL,
+	password_hash TEXT NOT NULL,
+	bio TEXT,
+	verified BOOLEAN DEFAULT FALSE,
+	college VARCHAR(255),
+	profile_image_url TEXT
+);
+
 
 Trip
 - trip_id: int
@@ -27,7 +45,22 @@ Trip
 - lodging_ids: List[lodge_id]
 - visibility: enum(public, private, friends)
 - owner_user_id: int
-- tags: List[str] # beach, city, adventure, budget-friendly, luxury, foodie, nightlife, nature, cultural
+- tags: List[str]  # beach, city, adventure, budget-friendly, luxury, foodie, nightlife, nature, cultural
+
+SQL
+CREATE TABLE trips (
+	trip_id SERIAL PRIMARY KEY,
+	thumbnail_url TEXT,
+	title VARCHAR(255) NOT NULL,
+	description TEXT,
+	latitude DECIMAL(9,6),
+	longitude DECIMAL(9,6),
+	cost DECIMAL(10,2),
+	duration VARCHAR(50),
+	date VARCHAR(7),
+	visibility VARCHAR(20),
+	owner_user_id INT NOT NULL REFERENCES travelers(user_id) ON DELETE CASCADE
+);
 
 
 Lodging
@@ -39,6 +72,19 @@ Lodging
 - coords: [decimal, decimal]  # [latitude, longitude]
 - cost: decimal
 
+SQL
+CREATE TABLE lodgings (
+	lodge_id SERIAL PRIMARY KEY,
+	address TEXT,
+	thumbnail_url TEXT,
+	title VARCHAR(255),
+	description TEXT,
+	latitude DECIMAL(9,6),
+	longitude DECIMAL(9,6),
+	cost DECIMAL(10,2)
+);
+
+
 Activity
 - activity_id: int
 - address: str
@@ -49,9 +95,83 @@ Activity
 - coords: [decimal, decimal]  # [latitude, longitude]
 - cost: decimal
 
+SQL
+CREATE TABLE activities (
+	activity_id SERIAL PRIMARY KEY,
+	address TEXT,
+	thumbnail_url TEXT,
+	title VARCHAR(255),
+	location TEXT,
+	description TEXT,
+	latitude DECIMAL(9,6),
+	longitude DECIMAL(9,6),
+	cost DECIMAL(10,2)
+);
+
+
 Comment
 - comment_id: int
 - user_id: int
 - trip_id: int
 - body: str
 - created_at: datetime
+
+SQL
+CREATE TABLE comments (
+	comment_id SERIAL PRIMARY KEY,
+	user_id INT NOT NULL REFERENCES travelers(user_id) ON DELETE CASCADE,
+	trip_id INT NOT NULL REFERENCES trips(trip_id) ON DELETE CASCADE,
+	body TEXT NOT NULL,
+	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+
+RELATIONSHIP TABLES (MANY-TO-MANY)
+
+Trip <-> Activity
+SQL
+CREATE TABLE trip_activities (
+	trip_id INT REFERENCES trips(trip_id) ON DELETE CASCADE,
+	activity_id INT REFERENCES activities(activity_id) ON DELETE CASCADE,
+	PRIMARY KEY (trip_id, activity_id)
+);
+
+Trip <-> Lodging
+SQL
+CREATE TABLE trip_lodgings (
+	trip_id INT REFERENCES trips(trip_id) ON DELETE CASCADE,
+	lodge_id INT REFERENCES lodgings(lodge_id) ON DELETE CASCADE,
+	PRIMARY KEY (trip_id, lodge_id)
+);
+
+Traveler <-> Favorited Trips
+SQL
+CREATE TABLE user_favorite_trips (
+	user_id INT REFERENCES travelers(user_id) ON DELETE CASCADE,
+	trip_id INT REFERENCES trips(trip_id) ON DELETE CASCADE,
+	PRIMARY KEY (user_id, trip_id)
+);
+
+Traveler <-> Planned Trips
+SQL
+CREATE TABLE user_planned_trips (
+	user_id INT REFERENCES travelers(user_id) ON DELETE CASCADE,
+	trip_id INT REFERENCES trips(trip_id) ON DELETE CASCADE,
+	PRIMARY KEY (user_id, trip_id)
+);
+
+Traveler <-> Favorited Travelers
+SQL
+CREATE TABLE user_favorite_travelers (
+	user_id INT REFERENCES travelers(user_id) ON DELETE CASCADE,
+	favorited_user_id INT REFERENCES travelers(user_id) ON DELETE CASCADE,
+	PRIMARY KEY (user_id, favorited_user_id)
+);
+
+Trip <-> Tags
+SQL
+CREATE TABLE trip_tags (
+	trip_id INT REFERENCES trips(trip_id) ON DELETE CASCADE,
+	tag VARCHAR(50) NOT NULL,
+	PRIMARY KEY (trip_id, tag)
+);
