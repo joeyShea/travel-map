@@ -2,9 +2,11 @@
 
 import { useState, useCallback } from "react";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { travelReviews, type TravelReview, type Activity } from "@/lib/travel-data";
 import SidebarPanel from "@/components/sidebar-panel";
 import FullScreenReview from "@/components/full-screen-review";
+import { Button } from "@/components/ui/button";
 import { Compass } from "lucide-react";
 
 const MapView = dynamic(() => import("@/components/map-view"), {
@@ -60,6 +62,14 @@ export default function TravelMap() {
             >
                 <Compass className="h-5 w-5 text-primary" />
                 <span className="text-sm font-semibold tracking-tight text-foreground">Travel Map</span>
+            </div>
+
+            <div className="absolute right-4 top-4 z-30">
+                <Link href="/trips">
+                    <Button variant="outline" size="sm">
+                        Add a trip
+                    </Button>
+                </Link>
             </div>
 
             <div className="flex h-full w-full">
