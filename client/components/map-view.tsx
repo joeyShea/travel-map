@@ -1,93 +1,88 @@
-"use client"
+"use client";
 
-import { useEffect, useRef, useCallback } from "react"
-import L from "leaflet"
-import "leaflet/dist/leaflet.css"
-import type { TravelReview, Activity } from "@/lib/travel-data"
+import { useEffect, useRef, useCallback } from "react";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
+import type { TravelReview, Activity } from "@/lib/travel-data";
 
 interface MapViewProps {
-  reviews: TravelReview[]
-  selectedReview: TravelReview | null
-  fullScreenReview: TravelReview | null
-  selectedActivity: Activity | null
-  onSelectReview: (review: TravelReview | null) => void
-  onSelectActivity: (activity: Activity | null) => void
+    reviews: TravelReview[];
+    selectedReview: TravelReview | null;
+    fullScreenReview: TravelReview | null;
+    selectedActivity: Activity | null;
+    onSelectReview: (review: TravelReview | null) => void;
+    onSelectActivity: (activity: Activity | null) => void;
 }
 
 export default function MapView({
-  reviews,
-  selectedReview,
-  fullScreenReview,
-  selectedActivity,
-  onSelectReview,
-  onSelectActivity,
+    reviews,
+    selectedReview,
+    fullScreenReview,
+    selectedActivity,
+    onSelectReview,
+    onSelectActivity,
 }: MapViewProps) {
-  const mapRef = useRef<L.Map | null>(null)
-  const mapContainerRef = useRef<HTMLDivElement>(null)
-  const markersRef = useRef<L.Marker[]>([])
-  const activityMarkersRef = useRef<L.Marker[]>([])
+    const mapRef = useRef<L.Map | null>(null);
+    const mapContainerRef = useRef<HTMLDivElement>(null);
+    const markersRef = useRef<L.Marker[]>([]);
+    const activityMarkersRef = useRef<L.Marker[]>([]);
 
-  // Initialize map
-  useEffect(() => {
-    if (!mapContainerRef.current || mapRef.current) return
+    // Initialize map
+    useEffect(() => {
+        if (!mapContainerRef.current || mapRef.current) return;
 
-    // Extended bounds to cover continental US + Alaska + Hawaii
-    const usBounds = L.latLngBounds([18, -180], [72, -60])
+        // Extended bounds to cover continental US + Alaska + Hawaii, with padding
+        const usBounds = L.latLngBounds([13, -180], [76, -60]);
 
-    const map = L.map(mapContainerRef.current, {
-      center: [39.5, -98.35],
-      zoom: 5,
-      minZoom: 4,
-      maxBounds: usBounds,
-      maxBoundsViscosity: 1.0,
-      zoomControl: false,
-      attributionControl: false,
-    })
+        const map = L.map(mapContainerRef.current, {
+            center: [39.5, -98.35],
+            zoom: 5,
+            minZoom: 4,
+            maxBounds: usBounds,
+            maxBoundsViscosity: 1.0,
+            zoomControl: false,
+            attributionControl: false,
+        });
 
-    L.tileLayer(
-      "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-      {
-        maxZoom: 19,
-        minZoom: 4,
-        bounds: usBounds,
-      }
-    ).addTo(map)
+        L.tileLayer("https://tile.jawg.io/jawg-sunny/{z}/{x}/{y}{r}.png?access-token={accessToken}", {
+            maxZoom: 22,
+            minZoom: 4,
+            accessToken: process.env.NEXT_PUBLIC_JAWG_API_KEY ?? "",
+        } as L.TileLayerOptions & { accessToken: string }).addTo(map);
 
-    L.control.zoom({ position: "bottomright" }).addTo(map)
-    L.control.attribution({ position: "bottomleft" }).addTo(map)
+        L.control.zoom({ position: "bottomright" }).addTo(map);
 
-    mapRef.current = map
+        mapRef.current = map;
 
-    let cancelled = false
+        let cancelled = false;
 
-    // Fly to user's current location if available
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          if (cancelled) return
-          map.flyTo([pos.coords.latitude, pos.coords.longitude], 10, {
-            duration: 1.5,
-          })
-        },
-        () => {
-          // Permission denied or unavailable — stay on US default
+        // Fly to user's current location if available
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    if (cancelled) return;
+                    map.flyTo([pos.coords.latitude, pos.coords.longitude], 12, {
+                        duration: 1.5,
+                    });
+                },
+                () => {
+                    // Permission denied or unavailable — stay on US default
+                },
+            );
         }
-      )
-    }
 
-    return () => {
-      cancelled = true
-      map.remove()
-      mapRef.current = null
-    }
-  }, [])
+        return () => {
+            cancelled = true;
+            map.remove();
+            mapRef.current = null;
+        };
+    }, []);
 
-  const createPhotoIcon = useCallback(
-    (review: TravelReview, isActive: boolean) => {
-      const size = isActive ? 80 : 64
-      return L.divIcon({
-        className: "photo-marker",
-        html: `
+    const createPhotoIcon = useCallback((review: TravelReview, isActive: boolean) => {
+        const size = isActive ? 80 : 64;
+        return L.divIcon({
+            className: "photo-marker",
+            html: `
         <div style="
           width: ${size}px;
           height: ${size}px;
@@ -120,19 +115,16 @@ export default function MapView({
           ">${review.title}</div>
         </div>
       `,
-        iconSize: [size, size],
-        iconAnchor: [size / 2, size / 2],
-      })
-    },
-    []
-  )
+            iconSize: [size, size],
+            iconAnchor: [size / 2, size / 2],
+        });
+    }, []);
 
-  const createActivityIcon = useCallback(
-    (activity: Activity, isActive: boolean) => {
-      const size = isActive ? 60 : 48
-      return L.divIcon({
-        className: "activity-marker",
-        html: `
+    const createActivityIcon = useCallback((activity: Activity, isActive: boolean) => {
+        const size = isActive ? 60 : 48;
+        return L.divIcon({
+            className: "activity-marker",
+            html: `
         <div style="
           width: ${size}px;
           height: ${size}px;
@@ -151,107 +143,101 @@ export default function MapView({
           />
         </div>
       `,
-        iconSize: [size, size],
-        iconAnchor: [size / 2, size / 2],
-      })
-    },
-    []
-  )
+            iconSize: [size, size],
+            iconAnchor: [size / 2, size / 2],
+        });
+    }, []);
 
-  // Create/update review markers
-  useEffect(() => {
-    const map = mapRef.current
-    if (!map) return
+    // Create/update review markers
+    useEffect(() => {
+        const map = mapRef.current;
+        if (!map) return;
 
-    // Clear existing markers
-    markersRef.current.forEach((m) => m.remove())
-    markersRef.current = []
+        // Clear existing markers
+        markersRef.current.forEach((m) => m.remove());
+        markersRef.current = [];
 
-    if (fullScreenReview) return // Hide review markers when full screen
+        if (fullScreenReview) return; // Hide review markers when full screen
 
-    reviews.forEach((review) => {
-      const isActive = selectedReview?.id === review.id
-      const icon = createPhotoIcon(review, isActive)
-      const marker = L.marker([review.lat, review.lng], { icon })
-        .addTo(map)
-        .on("click", () => {
-          onSelectReview(review)
-        })
-      markersRef.current.push(marker)
-    })
-  }, [reviews, selectedReview, fullScreenReview, createPhotoIcon, onSelectReview])
+        reviews.forEach((review) => {
+            const isActive = selectedReview?.id === review.id;
+            const icon = createPhotoIcon(review, isActive);
+            const marker = L.marker([review.lat, review.lng], { icon })
+                .addTo(map)
+                .on("click", () => {
+                    onSelectReview(review);
+                });
+            markersRef.current.push(marker);
+        });
+    }, [reviews, selectedReview, fullScreenReview, createPhotoIcon, onSelectReview]);
 
-  // Create/update activity markers
-  useEffect(() => {
-    const map = mapRef.current
-    if (!map) return
+    // Create/update activity markers
+    useEffect(() => {
+        const map = mapRef.current;
+        if (!map) return;
 
-    // Clear existing activity markers
-    activityMarkersRef.current.forEach((m) => m.remove())
-    activityMarkersRef.current = []
+        // Clear existing activity markers
+        activityMarkersRef.current.forEach((m) => m.remove());
+        activityMarkersRef.current = [];
 
-    if (!fullScreenReview) return
+        if (!fullScreenReview) return;
 
-    fullScreenReview.activities.forEach((activity) => {
-      const isActive = selectedActivity?.id === activity.id
-      const icon = createActivityIcon(activity, isActive)
-      const marker = L.marker([activity.lat, activity.lng], { icon })
-        .addTo(map)
-        .on("click", () => {
-          onSelectActivity(activity)
-          map.flyTo([activity.lat, activity.lng], 13, {
-            duration: 1,
-          })
-        })
-      activityMarkersRef.current.push(marker)
-    })
-  }, [fullScreenReview, selectedActivity, createActivityIcon, onSelectActivity])
+        fullScreenReview.activities.forEach((activity) => {
+            const isActive = selectedActivity?.id === activity.id;
+            const icon = createActivityIcon(activity, isActive);
+            const marker = L.marker([activity.lat, activity.lng], { icon })
+                .addTo(map)
+                .on("click", () => {
+                    onSelectActivity(activity);
+                    map.flyTo([activity.lat, activity.lng], 13, {
+                        duration: 1,
+                    });
+                });
+            activityMarkersRef.current.push(marker);
+        });
+    }, [fullScreenReview, selectedActivity, createActivityIcon, onSelectActivity]);
 
-  // Fly to review area when entering full screen
-  useEffect(() => {
-    const map = mapRef.current
-    if (!map) return
+    // Fly to review area when entering full screen
+    useEffect(() => {
+        const map = mapRef.current;
+        if (!map) return;
 
-    if (fullScreenReview) {
-      const bounds = L.latLngBounds(
-        fullScreenReview.activities.map((a) => [a.lat, a.lng])
-      )
-      map.flyToBounds(bounds.pad(0.5), {
-        duration: 1.5,
-        maxZoom: 12,
-      })
-    } else if (!selectedReview) {
-      map.flyTo([39.5, -98.35], 5, { duration: 1.5 })
-    }
-  }, [fullScreenReview, selectedReview])
+        if (fullScreenReview) {
+            const bounds = L.latLngBounds(fullScreenReview.activities.map((a) => [a.lat, a.lng]));
+            map.flyToBounds(bounds.pad(0.5), {
+                duration: 1.5,
+                maxZoom: 12,
+            });
+        } else if (!selectedReview) {
+            map.flyTo([39.5, -98.35], 5, { duration: 1.5 });
+        }
+    }, [fullScreenReview, selectedReview]);
 
-  // Fly to selected review in sidebar mode
-  useEffect(() => {
-    const map = mapRef.current
-    if (!map || fullScreenReview) return
+    // Fly to selected review in sidebar mode
+    useEffect(() => {
+        const map = mapRef.current;
+        if (!map || fullScreenReview) return;
 
-    if (selectedReview) {
-      map.flyTo([selectedReview.lat, selectedReview.lng], 11, {
-        duration: 1.2,
-      })
-    }
-  }, [selectedReview, fullScreenReview])
+        if (selectedReview) {
+            map.flyTo([selectedReview.lat, selectedReview.lng], 11, {
+                duration: 1.2,
+            });
+        }
+    }, [selectedReview, fullScreenReview]);
 
-  // Invalidate map size when container resizes (sidebar open/close)
-  useEffect(() => {
-    const map = mapRef.current
-    const container = mapContainerRef.current
-    if (!map || !container) return
+    // Invalidate map size when container resizes (sidebar open/close)
+    useEffect(() => {
+        const map = mapRef.current;
+        const container = mapContainerRef.current;
+        if (!map || !container) return;
 
-    const observer = new ResizeObserver(() => {
-      map.invalidateSize({ animate: true })
-    })
-    observer.observe(container)
+        const observer = new ResizeObserver(() => {
+            map.invalidateSize({ animate: true });
+        });
+        observer.observe(container);
 
-    return () => observer.disconnect()
-  }, [])
+        return () => observer.disconnect();
+    }, []);
 
-  return (
-    <div ref={mapContainerRef} className="h-full w-full" />
-  )
+    return <div ref={mapContainerRef} className="h-full w-full" />;
 }
