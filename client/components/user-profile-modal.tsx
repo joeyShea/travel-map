@@ -43,7 +43,7 @@ export default function UserProfileModal({ profile, onClose, expandFrom = "top-r
             />
 
             {/* Modal */}
-            <div className={`${animClass} fixed inset-6 z-[1600] flex flex-col rounded-2xl bg-card border border-border shadow-2xl overflow-hidden`}>
+            <div className={`${animClass} fixed inset-3 sm:inset-6 z-[1600] flex flex-col rounded-2xl bg-card border border-border shadow-2xl overflow-hidden`}>
                 {/* Close button */}
                 <button
                     onClick={onClose}
@@ -54,14 +54,14 @@ export default function UserProfileModal({ profile, onClose, expandFrom = "top-r
                 </button>
 
                 <ScrollArea className="flex-1">
-                    <div className="p-10">
+                    <div className="p-5 sm:p-10">
                         {/* User header */}
-                        <div className="flex items-start gap-6 mb-6">
-                            <div className="flex h-20 w-20 flex-shrink-0 items-center justify-center rounded-full bg-primary text-2xl font-bold text-primary-foreground">
+                        <div className="flex items-start gap-4 sm:gap-6 mb-6">
+                            <div className="flex h-14 w-14 sm:h-20 sm:w-20 flex-shrink-0 items-center justify-center rounded-full bg-primary text-xl sm:text-2xl font-bold text-primary-foreground">
                                 {profile.initials}
                             </div>
                             <div className="flex flex-col gap-1 pt-1">
-                                <h1 className="text-3xl font-bold tracking-tight text-foreground">
+                                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
                                     {profile.name}
                                 </h1>
                                 <p className="flex items-center gap-1.5 text-sm text-muted-foreground">

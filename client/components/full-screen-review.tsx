@@ -22,7 +22,7 @@ export default function FullScreenReview({
   onOpenAuthorProfile,
 }: FullScreenReviewProps) {
   return (
-    <div className="flex h-full w-[480px] flex-col bg-card border-r border-border">
+    <div className="flex h-full w-full flex-col bg-card border-r border-border">
       {/* Header */}
       <div className="relative h-64 flex-shrink-0">
         <Image src={review.thumbnail} alt={review.title} fill className="object-cover" priority />

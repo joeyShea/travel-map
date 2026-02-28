@@ -119,7 +119,7 @@ export default function TravelMap() {
                 {/* Side panel */}
                 <div
                     className="flex-shrink-0 h-full overflow-hidden transition-[width] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]"
-                    style={{ width: showSidebar ? 420 : showFullScreen ? 480 : 0 }}
+                    style={{ width: showSidebar ? "min(420px, 100vw)" : showFullScreen ? "min(480px, 100vw)" : 0 }}
                 >
                     {showSidebar && (
                         <SidebarPanel

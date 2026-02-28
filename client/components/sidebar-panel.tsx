@@ -14,7 +14,7 @@ interface SidebarPanelProps {
 
 export default function SidebarPanel({ review, onClose, onViewFull, onOpenAuthorProfile }: SidebarPanelProps) {
   return (
-    <div className="flex h-full w-[420px] flex-col bg-card border-r border-border">
+    <div className="flex h-full w-full flex-col bg-card border-r border-border">
       {/* Header image */}
       <div className="relative h-56 flex-shrink-0">
         <Image src={review.thumbnail} alt={review.title} fill className="object-cover" />

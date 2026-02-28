@@ -107,12 +107,11 @@ export default function SignUpPage() {
 
     return (
         /*
-         * Two-row CSS grid: top half holds the heading/toggle (anchored to the
-         * bottom of its row), bottom half holds the form (anchored to the top
-         * of its row). They meet at the vertical midpoint. Form height changes
-         * grow downward only — the heading never moves.
+         * Mobile: single flex column, fully scrollable (overflow-x-hidden only
+         * clips the decorative SVGs). md+: two-row CSS grid where the heading
+         * is anchored to the midpoint and the form grows downward only.
          */
-        <div className="relative grid min-h-screen grid-rows-2 overflow-hidden bg-[#fdf8f0] px-6">
+        <div className="relative min-h-screen overflow-x-hidden bg-[#fdf8f0] px-6 flex flex-col items-center py-12 md:grid md:grid-rows-2 md:py-0 md:items-stretch">
             {/* Decorative travel paths */}
             <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
                 <svg className="absolute -left-8 top-8 opacity-[0.30]" width="280" height="200" fill="none">
@@ -158,11 +157,12 @@ export default function SignUpPage() {
             </div>
 
             {/* ── TOP HALF: logo · heading · toggle · subtitle ─────────────────
-                justify-end pins everything to the bottom of this row so the
-                heading always sits at the exact vertical midpoint of the page. */}
-            <div className="flex flex-col items-center justify-end pb-10">
+                On md+: justify-end pins content to the bottom of its grid row
+                so the heading sits exactly at the page midpoint. On mobile:
+                natural stack order, no special alignment needed. */}
+            <div className="flex flex-col items-center w-full md:justify-end md:pb-8">
                 {/* Logo */}
-                <div className="mb-10 flex items-center gap-3">
+                <div className="mb-6 md:mb-10 flex items-center gap-3">
                     <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500 shadow-sm">
                         <MapPin className="h-5 w-5 text-white" />
                     </div>
@@ -251,17 +251,16 @@ export default function SignUpPage() {
             </div>
 
             {/* ── BOTTOM HALF: form inputs ──────────────────────────────────────
-                justify-start pins the form to the top of this row. Height
-                changes grow downward, never touching the heading above. */}
-            <div className="flex flex-col items-center justify-start pt-10">
+                On md+: justify-start pins the form to the top of its grid row.
+                On mobile: natural stack with top margin and bottom safe padding. */}
+            <div className="flex flex-col items-center w-full mt-6 pb-8 md:mt-0 md:pb-0 md:justify-start md:pt-8">
                 <form onSubmit={handleSubmit} className="flex w-full max-w-sm flex-col">
                     {/* Name field — collapses height + margin when in signin */}
                     <div
                         style={{
                             ...collapseStyle(isSignup),
                             marginBottom: isSignup ? "1rem" : "0",
-                            transition:
-                                "grid-template-rows 280ms ease, opacity 280ms ease, margin-bottom 280ms ease",
+                            transition: "grid-template-rows 280ms ease, opacity 280ms ease, margin-bottom 280ms ease",
                         }}
                     >
                         <div style={{ overflow: "hidden" }}>
@@ -297,8 +296,8 @@ export default function SignUpPage() {
                         <div style={collapseStyle(isStudent)}>
                             <div style={{ overflow: "hidden", paddingTop: "4px" }}>
                                 <p className="flex items-center gap-1 px-1 text-xs text-amber-600">
-                                    <GraduationCap className="h-3 w-3 shrink-0" />
-                                    A .edu email address is required for student accounts.
+                                    <GraduationCap className="h-3 w-3 shrink-0" />A .edu email address is required for
+                                    student accounts.
                                 </p>
                             </div>
                         </div>
@@ -317,7 +316,13 @@ export default function SignUpPage() {
                     />
 
                     {/* Error message — collapses when empty */}
-                    <div style={{ ...collapseStyle(!!error), marginBottom: error ? "0.75rem" : "0", transition: "grid-template-rows 200ms ease, opacity 200ms ease, margin-bottom 200ms ease" }}>
+                    <div
+                        style={{
+                            ...collapseStyle(!!error),
+                            marginBottom: error ? "0.75rem" : "0",
+                            transition: "grid-template-rows 200ms ease, opacity 200ms ease, margin-bottom 200ms ease",
+                        }}
+                    >
                         <div style={{ overflow: "hidden" }}>
                             <p className="px-1 text-xs text-red-500">{error}</p>
                         </div>
@@ -338,7 +343,10 @@ export default function SignUpPage() {
                             Already have an account?{" "}
                             <button
                                 type="button"
-                                onClick={() => { setMode("signin"); setError(""); }}
+                                onClick={() => {
+                                    setMode("signin");
+                                    setError("");
+                                }}
                                 className="text-amber-600 hover:underline underline-offset-4"
                             >
                                 Sign in
@@ -349,7 +357,10 @@ export default function SignUpPage() {
                             New here?{" "}
                             <button
                                 type="button"
-                                onClick={() => { setMode("signup"); setError(""); }}
+                                onClick={() => {
+                                    setMode("signup");
+                                    setError("");
+                                }}
                                 className="text-amber-600 hover:underline underline-offset-4"
                             >
                                 Create an account
