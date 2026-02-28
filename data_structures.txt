@@ -1,0 +1,57 @@
+TRAVEL DATA STRUCTURES
+
+Traveler
+- user_id: int
+- name: str
+- email: str
+- password_hash: str
+- bio: str
+- verified: bool
+- college: str
+- profile_image: Image
+- user_trip_ids: List[trip_id]
+- favorited_trip_ids: List[trip_id]
+- favorited_traveler_ids: List[user_id]
+- planned_trip_ids: List[trip_id]
+
+Trip
+- trip_id: int
+- thumbnail: Image
+- title: str
+- description: str
+- coords: [decimal, decimal]  # [latitude, longitude]
+- cost: decimal
+- duration: enum
+- date: MM-YY
+- activity_ids: List[activity_id]
+- lodging_ids: List[lodge_id]
+- visibility: enum(public, private, friends)
+- owner_user_id: int
+- tags: List[str] # beach, city, adventure, budget-friendly, luxury, foodie, nightlife, nature, cultural
+
+
+Lodging
+- lodge_id: int
+- address: str
+- thumbnail: Image
+- title: str
+- description: str
+- coords: [decimal, decimal]  # [latitude, longitude]
+- cost: decimal
+
+Activity
+- activity_id: int
+- address: str
+- thumbnail: Image
+- title: str
+- location: str
+- description: str
+- coords: [decimal, decimal]  # [latitude, longitude]
+- cost: decimal
+
+Comment
+- comment_id: int
+- user_id: int
+- trip_id: int
+- body: str
+- created_at: datetime
