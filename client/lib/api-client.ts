@@ -93,6 +93,35 @@ export async function createTrip(payload: CreateTripPayload): Promise<Trip> {
   return data.trip;
 }
 
+export async function uploadImage(file: File, folder = "trips"): Promise<string> {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("folder", folder);
+
+  const response = await fetch(`${API_BASE_URL}/uploads/images`, {
+    method: "POST",
+    credentials: "include",
+    body: formData,
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const message =
+      typeof payload?.error === "string"
+        ? payload.error
+        : typeof payload?.message === "string"
+          ? payload.message
+          : `Upload failed (${response.status})`;
+    throw new ApiError(message, response.status);
+  }
+
+  if (typeof payload?.url !== "string" || !payload.url.trim()) {
+    throw new ApiError("Upload response did not include image URL", 500);
+  }
+
+  return payload.url;
+}
+
 export async function addTripLodging(tripId: number, payload: AddLodgingPayload) {
   return requestJson<{ message: string }>(`/trips/${tripId}/lodgings`, {
     method: "POST",

@@ -4,6 +4,7 @@ from config import CLIENT_APP_URL, SECRET_KEY
 from routes.auth import auth_bp
 from routes.profile import profile_bp
 from routes.trips import trips_bp
+from routes.uploads import uploads_bp
 
 
 def create_app() -> Flask:
@@ -30,5 +31,6 @@ def create_app() -> Flask:
     app.register_blueprint(auth_bp)
     app.register_blueprint(profile_bp)
     app.register_blueprint(trips_bp)
+    app.register_blueprint(uploads_bp)
 
     return app

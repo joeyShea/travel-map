@@ -11,7 +11,7 @@ export interface MapActivity {
 
 export interface MapLodging {
   id: number;
-  title: string;
+  name: string;
   description: string;
   image: string;
   address: string;
@@ -43,6 +43,7 @@ export interface MapTrip {
   ownerBio: string;
   lodgings: MapLodging[];
   activities: MapActivity[];
+  lodging: MapLodging[] | null;
 }
 
 export interface ProfileTripEntry {
@@ -59,6 +60,7 @@ export interface ModalProfile {
   email: string;
   university: string;
   bio: string;
+  image_url: string | null;
   trips: ProfileTripEntry[];
 }
 
@@ -115,12 +117,15 @@ function toActivity(activity: TripActivity): MapActivity | null {
   };
 }
 
-function toLodging(lodging: Trip["lodgings"][number]): MapLodging {
+function toLodging(lodging: Trip["lodgings"][number]): MapLodging | null {
+  if (lodging.latitude === null || lodging.longitude === null) {
+    return null;
+  }
+
   return {
     id: lodging.lodge_id,
-    title: lodging.title || "Untitled stay",
-    description: lodging.description || "No lodging notes yet.",
-    image: lodging.thumbnail_url || PLACEHOLDER_IMAGE,
+    name: lodging.title || "Untitled lodging",
+    description: lodging.description || "No description yet.",
     address: lodging.address || "Location not provided",
     lat: lodging.latitude,
     lng: lodging.longitude,
@@ -137,6 +142,9 @@ export function toMapTrip(trip: Trip): MapTrip | null {
   const activities = trip.activities
     .map(toActivity)
     .filter((activity): activity is MapActivity => activity !== null);
+  const lodging = (trip.lodgings || [])
+    .map(toLodging)
+    .filter((item): item is MapLodging => item !== null);
 
   return {
     id: trip.trip_id,
@@ -154,6 +162,7 @@ export function toMapTrip(trip: Trip): MapTrip | null {
     ownerBio: trip.owner.bio || "Traveler sharing experiences from the road.",
     lodgings,
     activities,
+    lodging: lodging.length > 0 ? lodging : null,
   };
 }
 
@@ -174,6 +183,7 @@ export function toModalProfile(profile: UserProfileResponse): ModalProfile {
     email: profile.user.email,
     university: profile.user.college || "—",
     bio: profile.user.bio || "Traveler sharing experiences from the road.",
+    image_url: profile.user.profile_image_url,
     trips: profile.trips.map((trip) => ({
       id: trip.trip_id,
       title: trip.title,

@@ -16,3 +16,7 @@ DB_CONFIG = {
     "password": os.getenv("POSTGRES_PASSWORD"),
     "sslmode": os.getenv("POSTGRES_SSLMODE", "require"),
 }
+
+AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
+S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
+S3_PUBLIC_BASE_URL = os.getenv("S3_PUBLIC_BASE_URL")

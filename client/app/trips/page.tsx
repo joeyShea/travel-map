@@ -10,7 +10,7 @@ import PlacePicker from "@/components/place-picker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { ApiError, createTrip } from "@/lib/api-client";
+import { ApiError, createTrip, uploadImage } from "@/lib/api-client";
 import type { PlaceOption } from "@/lib/place-types";
 import { AVAILABLE_TAGS, BANNER_PLACEHOLDER } from "@/lib/trip-constants";
 import type { TripDuration, TripVisibility } from "@/lib/api-types";
@@ -140,6 +140,7 @@ export default function TripsPage() {
   const { status, isStudent } = useAuth();
 
   const [isSavingTrip, setIsSavingTrip] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [error, setError] = useState("");
 
   const [title, setTitle] = useState("");
@@ -357,15 +358,29 @@ export default function TripsPage() {
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                 <label className="inline-flex w-fit cursor-pointer items-center gap-2 rounded-full border border-stone-200 bg-white px-4 py-2 text-sm font-medium text-stone-700 transition-colors hover:bg-stone-100">
                   <ImagePlus className="h-4 w-4 text-amber-700" />
-                  Upload cover image
+                  {isUploadingImage ? "Uploading..." : "Upload cover image"}
                   <input
                     type="file"
                     accept="image/*"
+                    disabled={isUploadingImage}
                     className="sr-only"
                     onChange={(event) => {
                       const file = event.target.files?.[0];
-                      void handleCoverImageChange(file);
-                      event.currentTarget.value = "";
+                      if (!file) {
+                        setCoverImage("");
+                        return;
+                      }
+
+                      try {
+                        setError("");
+                        setIsUploadingImage(true);
+                        const imageUrl = await uploadImage(file, "trips/cover");
+                        setCoverImage(imageUrl);
+                      } catch {
+                        setError("Could not upload cover image. Please try again.");
+                      } finally {
+                        setIsUploadingImage(false);
+                      }
                     }}
                   />
                 </label>
@@ -545,62 +560,34 @@ export default function TripsPage() {
                           placeholder="Cost (optional)"
                           className={READABLE_INPUT_CLASS}
                         />
-                        <div className="space-y-2">
-                          <label className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-md border border-stone-200 bg-white px-3 py-2 text-sm text-stone-600 transition-colors hover:bg-stone-100">
-                            <ImagePlus className="h-4 w-4 text-amber-700" />
-                            {stop.imageUrl ? "Change photo" : "Add photo"}
-                            <input
-                              type="file"
-                              accept="image/*"
-                              className="sr-only"
-                              onChange={(event) => {
-                                const file = event.target.files?.[0];
-                                void handleStopImageChange("lodging", stop.id, file);
-                                event.currentTarget.value = "";
-                              }}
-                            />
-                          </label>
-                          {stop.isProcessingImage ? (
-                            <p className="text-xs text-stone-500">Processing image...</p>
-                          ) : stop.imageUrl ? (
-                            <p className="text-xs text-emerald-700">Photo attached.</p>
-                          ) : (
-                            <p className="text-xs text-stone-500">No photo selected.</p>
-                          )}
-                          {stop.imageError ? <p className="text-xs font-medium text-red-600">{stop.imageError}</p> : null}
-                        </div>
-                        {stop.imageUrl ? (
-                          <div className="sm:col-span-2">
-                            <div className="flex items-center gap-3 rounded-lg border border-stone-200 bg-white p-2">
-                              <img
-                                src={stop.imageUrl}
-                                alt={stop.title ? `${stop.title} preview` : "Stay photo preview"}
-                                className="h-20 w-20 rounded-md border border-stone-200 object-cover"
-                              />
-                              <div className="min-w-0 flex-1">
-                                <p className="truncate text-xs font-medium text-stone-700">
-                                  {stop.imageName || "Selected image"}
-                                </p>
-                                <p className="text-xs text-stone-500">Preview shown as it will appear in this post.</p>
-                              </div>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className="rounded-full"
-                                onClick={() =>
-                                  updateStop("lodging", stop.id, {
-                                    imageUrl: "",
-                                    imageName: "",
-                                    imageError: "",
-                                    isProcessingImage: false,
-                                  })
-                                }
-                              >
-                                Remove
-                              </Button>
-                            </div>
-                          </div>
-                        ) : null}
+                        <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-md border border-stone-200 bg-white px-3 py-2 text-sm text-stone-600 transition-colors hover:bg-stone-100">
+                          <ImagePlus className="h-4 w-4 text-amber-700" />
+                          Add photo
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="sr-only"
+                            onChange={async (event) => {
+                              const file = event.target.files?.[0];
+                              if (!file) {
+                                updateStop("lodging", stop.id, { imageUrl: "" });
+                                return;
+                              }
+                              try {
+                                setError("");
+                                updateStop("lodging", stop.id, { isProcessingImage: true });
+                                const imageUrl = await uploadImage(file, "trips/lodging");
+                              }
+                              catch {
+                                updateStop("lodging", stop.id, { imageError: "Could not upload this image. Please try again.", isProcessingImage: false });
+                                setError("Could not upload one of the stop images. Please try again.");
+                              }
+                              finally {
+                                updateStop("lodging", stop.id, { isProcessingImage: false });
+                              }
+                            }}
+                          />
+                        </label>
                       </div>
                     </div>
                   </div>
@@ -673,22 +660,36 @@ export default function TripsPage() {
                           placeholder="Cost (optional)"
                           className={READABLE_INPUT_CLASS}
                         />
-                        <div className="space-y-2">
-                          <label className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-md border border-stone-200 bg-white px-3 py-2 text-sm text-stone-600 transition-colors hover:bg-stone-100">
-                            <ImagePlus className="h-4 w-4 text-amber-700" />
-                            {stop.imageUrl ? "Change photo" : "Add photo"}
-                            <input
-                              type="file"
-                              accept="image/*"
-                              className="sr-only"
-                              onChange={(event) => {
-                                const file = event.target.files?.[0];
-                                void handleStopImageChange("activity", stop.id, file);
-                                event.currentTarget.value = "";
-                              }}
-                            />
-                          </label>
-                          {stop.isProcessingImage ? (
+                        <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-md border border-stone-200 bg-white px-3 py-2 text-sm text-stone-600 transition-colors hover:bg-stone-100">
+                          <ImagePlus className="h-4 w-4 text-amber-700" />
+                          {stop.imageUrl ? "Change photo" : "Add photo"}
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="sr-only"
+                            onChange={async (event) => {
+                              const file = event.target.files?.[0];
+                              if (!file) {
+                                updateStop("activity", stop.id, { imageUrl: "" });
+                                return;
+                              }
+                              try {
+                                setError("");
+                                updateStop("activity", stop.id, { isProcessingImage: true });
+                                const imageUrl = await uploadImage(file, "trips/activity");
+                                updateStop("activity", stop.id, { imageUrl });
+                              }
+                              catch {
+                                updateStop("activity", stop.id, { imageError: "Could not upload this image. Please try again.", isProcessingImage: false });
+                                setError("Could not upload one of the stop images. Please try again.");
+                              }
+                              finally {
+                                updateStop("activity", stop.id, { isProcessingImage: false });
+                              }
+                            }}
+                          />
+                        </label>
+                        {/* {stop.isProcessingImage ? (
                             <p className="text-xs text-stone-500">Processing image...</p>
                           ) : stop.imageUrl ? (
                             <p className="text-xs text-emerald-700">Photo attached.</p>
@@ -728,7 +729,7 @@ export default function TripsPage() {
                               </Button>
                             </div>
                           </div>
-                        ) : null}
+                        ) : null} */}
                       </div>
                     </div>
                   </div>
