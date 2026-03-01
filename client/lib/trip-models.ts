@@ -9,6 +9,24 @@ export interface MapActivity {
   lng: number;
 }
 
+export interface MapLodging {
+  id: number;
+  title: string;
+  description: string;
+  image: string;
+  address: string;
+  lat: number | null;
+  lng: number | null;
+}
+
+export interface SavedActivityEntry {
+  key: string;
+  tripId: number;
+  tripTitle: string;
+  tripThumbnail: string;
+  activity: MapActivity;
+}
+
 export interface MapTrip {
   id: number;
   title: string;
@@ -23,6 +41,7 @@ export interface MapTrip {
   ownerVerified: boolean;
   ownerCollege: string;
   ownerBio: string;
+  lodgings: MapLodging[];
   activities: MapActivity[];
 }
 
@@ -45,6 +64,27 @@ export interface ModalProfile {
 
 const PLACEHOLDER_IMAGE =
   "https://images.unsplash.com/photo-1488085061387-422e29b40080?auto=format&fit=crop&w=1200&q=80";
+
+function toDisplayDate(dateValue: string | null | undefined): string {
+  if (!dateValue) {
+    return "No date";
+  }
+
+  const parsed = new Date(dateValue);
+  if (Number.isNaN(parsed.getTime())) {
+    return dateValue;
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(parsed);
+}
+
+export function buildSavedActivityKey(tripId: number, activityId: number): string {
+  return `${tripId}:${activityId}`;
+}
 
 function firstSentence(value: string): string {
   const normalized = value.trim();
@@ -75,12 +115,25 @@ function toActivity(activity: TripActivity): MapActivity | null {
   };
 }
 
+function toLodging(lodging: Trip["lodgings"][number]): MapLodging {
+  return {
+    id: lodging.lodge_id,
+    title: lodging.title || "Untitled stay",
+    description: lodging.description || "No lodging notes yet.",
+    image: lodging.thumbnail_url || PLACEHOLDER_IMAGE,
+    address: lodging.address || "Location not provided",
+    lat: lodging.latitude,
+    lng: lodging.longitude,
+  };
+}
+
 export function toMapTrip(trip: Trip): MapTrip | null {
   if (trip.latitude === null || trip.longitude === null) {
     return null;
   }
 
   const description = (trip.description || "").trim();
+  const lodgings = trip.lodgings.map(toLodging);
   const activities = trip.activities
     .map(toActivity)
     .filter((activity): activity is MapActivity => activity !== null);
@@ -90,7 +143,7 @@ export function toMapTrip(trip: Trip): MapTrip | null {
     title: trip.title,
     thumbnail: trip.thumbnail_url || PLACEHOLDER_IMAGE,
     author: trip.owner.name || "Unknown traveler",
-    date: trip.date || "No date",
+    date: toDisplayDate(trip.date),
     lat: trip.latitude,
     lng: trip.longitude,
     summary: firstSentence(description || trip.title),
@@ -99,6 +152,7 @@ export function toMapTrip(trip: Trip): MapTrip | null {
     ownerVerified: trip.owner.verified,
     ownerCollege: trip.owner.college || "—",
     ownerBio: trip.owner.bio || "Traveler sharing experiences from the road.",
+    lodgings,
     activities,
   };
 }
@@ -124,7 +178,7 @@ export function toModalProfile(profile: UserProfileResponse): ModalProfile {
       id: trip.trip_id,
       title: trip.title,
       thumbnail: trip.thumbnail_url || PLACEHOLDER_IMAGE,
-      date: trip.date || "No date",
+      date: toDisplayDate(trip.date),
     })),
   };
 }

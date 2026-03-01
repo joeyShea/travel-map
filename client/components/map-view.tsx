@@ -15,6 +15,31 @@ interface MapViewProps {
 }
 
 const SELECTED_REVIEW_ZOOM = 16;
+let hasAutoCenteredOnUser = false;
+
+function getLocationKey(lat: number, lng: number): string {
+    return `${lat.toFixed(6)}:${lng.toFixed(6)}`;
+}
+
+function getTripTimestamp(dateValue: string): number {
+    const timestamp = Date.parse(dateValue);
+    return Number.isNaN(timestamp) ? 0 : timestamp;
+}
+
+function getMostRecentTripsByLocation(trips: MapTrip[]): MapTrip[] {
+    const mostRecentByLocation = new Map<string, MapTrip>();
+
+    trips.forEach((trip) => {
+        const key = getLocationKey(trip.lat, trip.lng);
+        const currentMostRecent = mostRecentByLocation.get(key);
+
+        if (!currentMostRecent || getTripTimestamp(trip.date) > getTripTimestamp(currentMostRecent.date)) {
+            mostRecentByLocation.set(key, trip);
+        }
+    });
+
+    return Array.from(mostRecentByLocation.values());
+}
 
 export default function MapView({
     trips,
@@ -28,6 +53,22 @@ export default function MapView({
     const mapContainerRef = useRef<HTMLDivElement>(null);
     const markersRef = useRef<L.Marker[]>([]);
     const activityMarkersRef = useRef<L.Marker[]>([]);
+    const lastFocusedLocationKeyRef = useRef<string | null>(null);
+    const selectedTripRef = useRef<MapTrip | null>(null);
+    const fullScreenTripRef = useRef<MapTrip | null>(null);
+    const selectedActivityRef = useRef<MapActivity | null>(null);
+
+    useEffect(() => {
+        selectedTripRef.current = selectedTrip;
+    }, [selectedTrip]);
+
+    useEffect(() => {
+        fullScreenTripRef.current = fullScreenTrip;
+    }, [fullScreenTrip]);
+
+    useEffect(() => {
+        selectedActivityRef.current = selectedActivity;
+    }, [selectedActivity]);
 
     // Initialize map
     useEffect(() => {
@@ -58,16 +99,28 @@ export default function MapView({
 
         let cancelled = false;
 
-        // Fly to user's current location if available
-        if (navigator.geolocation) {
+        // Fly to user's current location if available (at most once per app session).
+        if (!hasAutoCenteredOnUser && navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(
                 (pos) => {
-                    if (cancelled) return;
+                    if (cancelled || hasAutoCenteredOnUser) return;
+
+                    if (
+                        selectedTripRef.current !== null ||
+                        fullScreenTripRef.current !== null ||
+                        selectedActivityRef.current !== null
+                    ) {
+                        hasAutoCenteredOnUser = true;
+                        return;
+                    }
+
+                    hasAutoCenteredOnUser = true;
                     map.flyTo([pos.coords.latitude, pos.coords.longitude], 12, {
                         duration: 1.5,
                     });
                 },
                 () => {
+                    hasAutoCenteredOnUser = true;
                     // Permission denied or unavailable — stay on US default
                 },
             );
@@ -159,10 +212,25 @@ export default function MapView({
         markersRef.current.forEach((m) => m.remove());
         markersRef.current = [];
 
-        if (fullScreenTrip) return; // Hide trip markers when full screen
+        const mostRecentTrips = getMostRecentTripsByLocation(trips);
 
-        trips.forEach((trip) => {
-            const isActive = selectedTrip?.id === trip.id;
+        if (fullScreenTrip) {
+            const fullScreenLocationKey = getLocationKey(fullScreenTrip.lat, fullScreenTrip.lng);
+            const locationRepresentative =
+                mostRecentTrips.find((trip) => getLocationKey(trip.lat, trip.lng) === fullScreenLocationKey) ??
+                fullScreenTrip;
+
+            const icon = createPhotoIcon(locationRepresentative, true);
+            const marker = L.marker([locationRepresentative.lat, locationRepresentative.lng], { icon }).addTo(map);
+            markersRef.current.push(marker);
+            return;
+        }
+
+        const selectedLocationKey = selectedTrip ? getLocationKey(selectedTrip.lat, selectedTrip.lng) : null;
+
+        mostRecentTrips.forEach((trip) => {
+            const tripLocationKey = getLocationKey(trip.lat, trip.lng);
+            const isActive = selectedLocationKey !== null && selectedLocationKey === tripLocationKey;
             const icon = createPhotoIcon(trip, isActive);
             const marker = L.marker([trip.lat, trip.lng], { icon })
                 .addTo(map)
@@ -205,10 +273,19 @@ export default function MapView({
         if (!map || fullScreenTrip) return;
 
         if (selectedTrip) {
+            const selectedLocationKey = getLocationKey(selectedTrip.lat, selectedTrip.lng);
+            if (lastFocusedLocationKeyRef.current === selectedLocationKey) {
+                return;
+            }
+
+            lastFocusedLocationKeyRef.current = selectedLocationKey;
             map.flyTo([selectedTrip.lat, selectedTrip.lng], SELECTED_REVIEW_ZOOM, {
                 duration: 1.2,
             });
+            return;
         }
+
+        lastFocusedLocationKeyRef.current = null;
     }, [selectedTrip, fullScreenTrip]);
 
     // Invalidate map size when container resizes (sidebar open/close)

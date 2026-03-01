@@ -1,20 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { usePathname, useRouter } from "next/navigation";
-import { CircleUser, MapPin, Search } from "lucide-react";
+import { CircleUser, MapPin, Notebook, Search } from "lucide-react";
 
 import { useAuth } from "@/components/auth-provider";
 import FullScreenReview from "@/components/full-screen-review";
+import PlansSidebarPanel from "@/components/plans-sidebar-panel";
 import SearchSidebarPanel from "@/components/search-sidebar-panel";
 import SidebarPanel from "@/components/sidebar-panel";
 import StudentAddMenu from "@/components/student-add-menu";
 import UserProfileModal, { type UserProfile } from "@/components/user-profile-modal";
 import { deleteTrip, getTrip, getTrips, getUserProfile } from "@/lib/api-client";
 import type { UserProfileResponse } from "@/lib/api-types";
-import type { MapActivity, MapTrip, ModalProfile } from "@/lib/trip-models";
-import { toMapTrip, toModalProfile } from "@/lib/trip-models";
+import type { MapActivity, MapTrip, ModalProfile, SavedActivityEntry } from "@/lib/trip-models";
+import { buildSavedActivityKey, toMapTrip, toModalProfile } from "@/lib/trip-models";
 
 const MapView = dynamic(() => import("@/components/map-view"), {
   ssr: false,
@@ -32,6 +33,15 @@ interface ProfileState {
 }
 
 const REVIEW_PANEL_WIDTH = "min(420px, 100vw)";
+
+function getLocationKey(lat: number, lng: number): string {
+  return `${lat.toFixed(6)}:${lng.toFixed(6)}`;
+}
+
+function getTripTimestamp(dateValue: string): number {
+  const timestamp = Date.parse(dateValue);
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+}
 
 function toUserProfile(profile: ModalProfile): UserProfile {
   return {
@@ -61,11 +71,14 @@ export default function TravelMap() {
   const [profileState, setProfileState] = useState<ProfileState | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchPanelOpen, setSearchPanelOpen] = useState(false);
+  const [plansPanelOpen, setPlansPanelOpen] = useState(false);
+  const [savedActivityKeys, setSavedActivityKeys] = useState<string[]>([]);
 
   const [isLoadingTrips, setIsLoadingTrips] = useState(true);
   const [isLoadingTripById, setIsLoadingTripById] = useState(false);
   const [deletingTripId, setDeletingTripId] = useState<number | null>(null);
   const [profileCacheByUser, setProfileCacheByUser] = useState<Record<number, UserProfile>>({});
+  const activeTripRequestIdRef = useRef(0);
 
   const tripLookup = useMemo(() => {
     return new Map(trips.map((trip) => [trip.id, trip]));
@@ -82,6 +95,32 @@ export default function TravelMap() {
       next[index] = trip;
       return next;
     });
+  }, []);
+
+  const savedActivityKeySet = useMemo(() => new Set(savedActivityKeys), [savedActivityKeys]);
+
+  const savedActivities = useMemo<SavedActivityEntry[]>(() => {
+    const keySet = new Set(savedActivityKeys);
+
+    return trips.flatMap((trip) =>
+      trip.activities
+        .filter((activity) => keySet.has(buildSavedActivityKey(trip.id, activity.id)))
+        .map((activity) => ({
+          key: buildSavedActivityKey(trip.id, activity.id),
+          tripId: trip.id,
+          tripTitle: trip.title,
+          tripThumbnail: trip.thumbnail,
+          activity,
+        })),
+    );
+  }, [trips, savedActivityKeys]);
+
+  const handleToggleSavedActivity = useCallback((tripId: number, activity: MapActivity) => {
+    const key = buildSavedActivityKey(tripId, activity.id);
+
+    setSavedActivityKeys((current) =>
+      current.includes(key) ? current.filter((item) => item !== key) : [key, ...current],
+    );
   }, []);
 
   useEffect(() => {
@@ -124,10 +163,15 @@ export default function TravelMap() {
 
   const openTripById = useCallback(
     async (tripId: number | null) => {
+      const requestId = activeTripRequestIdRef.current + 1;
+      activeTripRequestIdRef.current = requestId;
+
       if (tripId === null) {
         setSelectedTrip(null);
         setFullScreenTrip(null);
         setSelectedActivity(null);
+        setPlansPanelOpen(false);
+        setIsLoadingTripById(false);
         return;
       }
 
@@ -145,15 +189,22 @@ export default function TravelMap() {
         }
 
         upsertTrip(mappedTrip);
+        if (requestId !== activeTripRequestIdRef.current) {
+          return;
+        }
+
         setSelectedTrip(mappedTrip);
         setFullScreenTrip(null);
         setSelectedActivity(null);
         setSearchPanelOpen(false);
         setSearchQuery("");
+        setPlansPanelOpen(false);
       } catch {
         // If trip fetch fails, keep any cached view state.
       } finally {
-        setIsLoadingTripById(false);
+        if (requestId === activeTripRequestIdRef.current) {
+          setIsLoadingTripById(false);
+        }
       }
     },
     [tripLookup, upsertTrip],
@@ -165,6 +216,7 @@ export default function TravelMap() {
     setSelectedActivity(null);
     setSearchPanelOpen(false);
     setSearchQuery("");
+    setPlansPanelOpen(false);
   }, []);
 
   const handleBack = useCallback(() => {
@@ -176,6 +228,60 @@ export default function TravelMap() {
   const handleSelectActivity = useCallback((activity: MapActivity | null) => {
     setSelectedActivity(activity);
   }, []);
+
+  const tripsAtSelectedLocation = useMemo(() => {
+    if (!selectedTrip) {
+      return [];
+    }
+
+    const selectedLocationKey = getLocationKey(selectedTrip.lat, selectedTrip.lng);
+
+    return trips
+      .filter((trip) => getLocationKey(trip.lat, trip.lng) === selectedLocationKey)
+      .sort((left, right) => getTripTimestamp(right.date) - getTripTimestamp(left.date));
+  }, [trips, selectedTrip]);
+
+  const selectedTripLocationIndex = useMemo(() => {
+    if (!selectedTrip) {
+      return -1;
+    }
+
+    return tripsAtSelectedLocation.findIndex((trip) => trip.id === selectedTrip.id);
+  }, [selectedTrip, tripsAtSelectedLocation]);
+
+  const handleShowPreviousTripAtLocation = useCallback(() => {
+    if (selectedTripLocationIndex <= 0) {
+      return;
+    }
+
+    const previousTrip = tripsAtSelectedLocation[selectedTripLocationIndex - 1];
+    if (!previousTrip) {
+      return;
+    }
+
+    activeTripRequestIdRef.current += 1;
+    setIsLoadingTripById(false);
+    setSelectedTrip(previousTrip);
+    setFullScreenTrip(null);
+    setSelectedActivity(null);
+  }, [selectedTripLocationIndex, tripsAtSelectedLocation]);
+
+  const handleShowNextTripAtLocation = useCallback(() => {
+    if (selectedTripLocationIndex < 0 || selectedTripLocationIndex >= tripsAtSelectedLocation.length - 1) {
+      return;
+    }
+
+    const nextTrip = tripsAtSelectedLocation[selectedTripLocationIndex + 1];
+    if (!nextTrip) {
+      return;
+    }
+
+    activeTripRequestIdRef.current += 1;
+    setIsLoadingTripById(false);
+    setSelectedTrip(nextTrip);
+    setFullScreenTrip(null);
+    setSelectedActivity(null);
+  }, [selectedTripLocationIndex, tripsAtSelectedLocation]);
 
   const openProfile = useCallback(
     async (targetUserId: number, expandFrom: "top-right" | "left") => {
@@ -289,6 +395,7 @@ export default function TravelMap() {
 
     if (value.trim()) {
       setSearchPanelOpen(true);
+      setPlansPanelOpen(false);
       setSelectedTrip(null);
       setFullScreenTrip(null);
       setSelectedActivity(null);
@@ -297,29 +404,62 @@ export default function TravelMap() {
     }
   }, []);
 
+  const handleTogglePlansPanel = useCallback(() => {
+    setPlansPanelOpen((current) => {
+      const next = !current;
+
+      if (next) {
+        setSearchPanelOpen(false);
+        setSearchQuery("");
+        setSelectedTrip(null);
+        setFullScreenTrip(null);
+        setSelectedActivity(null);
+      }
+
+      return next;
+    });
+  }, []);
+
   const showSidebar = !!selectedTrip && !fullScreenTrip;
   const showFullScreen = !!fullScreenTrip;
   const showSearchPanel = searchPanelOpen && !showSidebar && !showFullScreen;
-  const showSearchBar = showSearchPanel || (!showSidebar && !showFullScreen);
-  const showAnyLeftSidebar = showSidebar || showFullScreen || showSearchPanel;
+  const showPlansPanel = plansPanelOpen && !showSidebar && !showFullScreen && !showSearchPanel;
+  const showTopLeftControls = showSearchPanel || showPlansPanel || (!showSidebar && !showFullScreen);
+  const showAnyLeftSidebar = showSidebar || showFullScreen || showSearchPanel || showPlansPanel;
 
-  const searchBarWidthClass = showSearchPanel
-    ? "w-[min(320px,calc(100vw-7.5rem))]"
-    : "w-[min(360px,calc(100vw-2rem))]";
+  const topLeftControlsWidthClass = showSearchPanel || showPlansPanel
+    ? "w-[min(390px,calc(100vw-7.5rem))]"
+    : "w-[min(440px,calc(100vw-2rem))]";
 
   return (
     <div className="relative h-screen w-screen overflow-hidden">
-      {showSearchBar && (
-        <div className={`absolute left-4 top-3 z-[1000] ${searchBarWidthClass}`}>
-          <div className="flex h-10 items-center gap-2 rounded-full border border-border bg-card/95 px-4 shadow-sm backdrop-blur-sm">
-            <Search className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
-            <input
-              value={searchQuery}
-              onChange={(e) => handleSearchChange(e.target.value)}
-              placeholder="Search trips, places, or keywords"
-              className="h-full w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
-              aria-label="Search trips"
-            />
+      {showTopLeftControls && (
+        <div className={`absolute left-4 top-3 z-[1000] ${topLeftControlsWidthClass}`}>
+          <div className="flex items-center gap-2">
+            <div className="flex h-10 flex-1 items-center gap-2 rounded-full border border-border bg-card/95 px-4 shadow-sm backdrop-blur-sm">
+              <Search className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+              <input
+                value={searchQuery}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                placeholder="Search trips, places, or keywords"
+                className="h-full w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
+                aria-label="Search trips"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={handleTogglePlansPanel}
+              className={`flex h-10 items-center justify-center gap-1.5 rounded-full border px-3 text-sm font-medium shadow-sm backdrop-blur-sm transition-colors ${
+                showPlansPanel
+                  ? "border-primary/40 bg-primary/10 text-primary hover:bg-primary/20"
+                  : "border-border bg-card/95 text-foreground hover:bg-card"
+              }`}
+              aria-label="Open plans"
+              title="Plans"
+            >
+              <Notebook className="h-4 w-4" />
+              <span className="hidden sm:inline">Plans</span>
+            </button>
           </div>
         </div>
       )}
@@ -345,7 +485,7 @@ export default function TravelMap() {
       <div className="flex h-full w-full">
         <div
           className="h-full flex-shrink-0 overflow-hidden transition-[width] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]"
-          style={{ width: showSidebar || showFullScreen || showSearchPanel ? REVIEW_PANEL_WIDTH : 0 }}
+          style={{ width: showSidebar || showFullScreen || showSearchPanel || showPlansPanel ? REVIEW_PANEL_WIDTH : 0 }}
         >
           {showSidebar && selectedTrip && (
             <SidebarPanel
@@ -355,6 +495,16 @@ export default function TravelMap() {
               onOpenAuthorProfile={(profileUserId) => {
                 void openProfile(profileUserId, "left");
               }}
+              savedActivityKeys={savedActivityKeySet}
+              onToggleSavedActivity={handleToggleSavedActivity}
+              locationTripCount={tripsAtSelectedLocation.length}
+              locationTripPosition={selectedTripLocationIndex >= 0 ? selectedTripLocationIndex + 1 : 1}
+              onShowPreviousTripAtLocation={handleShowPreviousTripAtLocation}
+              onShowNextTripAtLocation={handleShowNextTripAtLocation}
+              canShowPreviousTripAtLocation={selectedTripLocationIndex > 0}
+              canShowNextTripAtLocation={
+                selectedTripLocationIndex >= 0 && selectedTripLocationIndex < tripsAtSelectedLocation.length - 1
+              }
             />
           )}
           {showFullScreen && fullScreenTrip && (
@@ -366,6 +516,8 @@ export default function TravelMap() {
               onOpenAuthorProfile={(profileUserId) => {
                 void openProfile(profileUserId, "left");
               }}
+              savedActivityKeys={savedActivityKeySet}
+              onToggleSavedActivity={handleToggleSavedActivity}
             />
           )}
           {showSearchPanel && (
@@ -374,6 +526,22 @@ export default function TravelMap() {
               onClose={() => {
                 setSearchPanelOpen(false);
                 setSearchQuery("");
+              }}
+            />
+          )}
+          {showPlansPanel && (
+            <PlansSidebarPanel
+              savedActivities={savedActivities}
+              onClose={() => {
+                setPlansPanelOpen(false);
+              }}
+              onOpenTrip={(tripId) => {
+                setPlansPanelOpen(false);
+                void openTripById(tripId);
+              }}
+              onToggleSavedActivity={(tripId, activityId) => {
+                const key = buildSavedActivityKey(tripId, activityId);
+                setSavedActivityKeys((current) => current.filter((currentKey) => currentKey !== key));
               }}
             />
           )}
