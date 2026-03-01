@@ -167,6 +167,31 @@ export default function MapView({
 
         L.control.zoom({ position: "bottomright" }).addTo(map);
 
+        // Locate / "home" button — positioned below the zoom control
+        const locateControl = new L.Control({ position: "bottomright" });
+        locateControl.onAdd = () => {
+            const container = L.DomUtil.create("div", "leaflet-bar leaflet-control");
+            const btn = L.DomUtil.create("a", "", container);
+            btn.href = "#";
+            btn.title = "Go to my location";
+            btn.setAttribute("role", "button");
+            btn.style.cssText =
+                "display:flex!important;align-items:center;justify-content:center;width:30px!important;height:30px!important;line-height:30px;";
+            btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/></svg>`;
+            L.DomEvent.on(btn, "click", (e) => {
+                L.DomEvent.preventDefault(e);
+                if (!navigator.geolocation) return;
+                navigator.geolocation.getCurrentPosition((pos) => {
+                    map.flyTo([pos.coords.latitude, pos.coords.longitude], INITIAL_USER_ZOOM, {
+                        duration: 1.2,
+                    });
+                });
+            });
+            L.DomEvent.disableClickPropagation(container);
+            return container;
+        };
+        locateControl.addTo(map);
+
         mapRef.current = map;
         map.on("moveend", () => persistMapView(map));
 
@@ -276,14 +301,14 @@ export default function MapView({
             width:0;height:0;
             border-left:${Math.round(size / 2)}px solid transparent;
             border-right:${Math.round(size / 2)}px solid transparent;
-            border-bottom:${roofHeight}px solid ${isActive ? "#d4a055" : "#000"};
+            border-bottom:${roofHeight}px solid ${isActive ? "#d4a055" : "#fff"};
             filter:drop-shadow(0 3px 8px rgba(0,0,0,0.45));
           "></div>
           <div style="
             position:absolute;top:${Math.max(roofHeight - 2, 0)}px;left:50%;transform:translateX(-50%);
             width:${Math.round(size * 0.78)}px;height:${bodyHeight}px;
             border-radius:0 0 10px 10px;overflow:hidden;
-            border:${isActive ? "3px solid #d4a055" : "2px solid #000"};
+            border:${isActive ? "3px solid #d4a055" : "2px solid #fff"};
             box-shadow:0 4px 14px rgba(0,0,0,0.45);background:#111;
           ">
             <img

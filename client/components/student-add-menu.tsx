@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Plus, Plane, Timer } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -12,11 +12,25 @@ interface StudentAddMenuProps {
 
 export default function StudentAddMenu({ visible, onAddTrip, onAddPopUp }: StudentAddMenuProps) {
     const [open, setOpen] = useState(false);
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (!open) return;
+
+        function handlePointerDown(e: PointerEvent) {
+            if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+                setOpen(false);
+            }
+        }
+
+        document.addEventListener("pointerdown", handlePointerDown);
+        return () => document.removeEventListener("pointerdown", handlePointerDown);
+    }, [open]);
 
     if (!visible) return null;
 
     return (
-        <div className="absolute bottom-4 left-4 z-[1000] flex flex-col items-start">
+        <div ref={containerRef} className="absolute bottom-4 left-4 z-[1000] flex flex-col items-start">
             <div className="mb-3 flex flex-col items-start gap-2">
                 <button
                     onClick={() => {

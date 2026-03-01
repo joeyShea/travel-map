@@ -146,4 +146,21 @@ export async function getUserProfile(userId: number): Promise<UserProfileRespons
   return requestJson<UserProfileResponse>(`/users/${userId}/profile`, { method: "GET" });
 }
 
+export interface SavedPlans {
+  saved_activity_ids: number[];
+  saved_lodging_ids: number[];
+}
+
+export async function getSavedPlans(): Promise<SavedPlans> {
+  return requestJson<SavedPlans>("/users/me/plans", { method: "GET" });
+}
+
+export async function toggleSavedActivity(activityId: number): Promise<SavedPlans> {
+  return requestJson<SavedPlans>(`/users/me/plans/activities/${activityId}`, { method: "POST" });
+}
+
+export async function toggleSavedLodging(lodgeId: number): Promise<SavedPlans> {
+  return requestJson<SavedPlans>(`/users/me/plans/lodgings/${lodgeId}`, { method: "POST" });
+}
+
 export { ApiError };

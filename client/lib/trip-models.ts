@@ -21,7 +21,6 @@ export interface MapLodging {
 }
 
 export interface SavedActivityEntry {
-  key: string;
   tripId: number;
   tripTitle: string;
   tripThumbnail: string;
@@ -29,7 +28,6 @@ export interface SavedActivityEntry {
 }
 
 export interface SavedLodgingEntry {
-  key: string;
   tripId: number;
   tripTitle: string;
   tripThumbnail: string;
@@ -94,13 +92,6 @@ function toDisplayDate(dateValue: string | null | undefined): string {
   }).format(parsed);
 }
 
-export function buildSavedActivityKey(tripId: number, activityId: number): string {
-  return `${tripId}:${activityId}`;
-}
-
-export function buildSavedLodgingKey(tripId: number, lodgingId: number): string {
-  return `lodging:${tripId}:${lodgingId}`;
-}
 
 function firstSentence(value: string): string {
   const normalized = value.trim();

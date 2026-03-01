@@ -3,8 +3,6 @@
 import Image from "next/image";
 import { X, ArrowRight, MapPin, Calendar, Notebook, ChevronLeft, ChevronRight, User, BedDouble } from "lucide-react";
 import {
-    buildSavedActivityKey,
-    buildSavedLodgingKey,
     type MapActivity,
     type MapLodging,
     type MapTrip,
@@ -17,8 +15,8 @@ interface SidebarPanelProps {
     onClose: () => void;
     onViewFull: (trip: MapTrip) => void;
     onOpenAuthorProfile: (userId: number) => void;
-    savedActivityKeys: ReadonlySet<string>;
-    savedLodgingKeys: ReadonlySet<string>;
+    savedActivityIds: ReadonlySet<number>;
+    savedLodgingIds: ReadonlySet<number>;
     onToggleSavedActivity: (tripId: number, activity: MapActivity) => void;
     onToggleSavedLodging: (tripId: number, lodging: MapLodging) => void;
     selectedActivityId: number | null;
@@ -59,8 +57,8 @@ export default function SidebarPanel({
     onClose,
     onViewFull,
     onOpenAuthorProfile,
-    savedActivityKeys,
-    savedLodgingKeys,
+    savedActivityIds,
+    savedLodgingIds,
     onToggleSavedActivity,
     onToggleSavedLodging,
     selectedActivityId,
@@ -78,9 +76,9 @@ export default function SidebarPanel({
     const fabLodging = !fabActivity ? (review.lodgings.find((l) => l.id === selectedLodgingId) ?? null) : null;
 
     const fabSaved = fabActivity
-        ? savedActivityKeys.has(buildSavedActivityKey(review.id, fabActivity.id))
+        ? savedActivityIds.has(fabActivity.id)
         : fabLodging
-          ? savedLodgingKeys.has(buildSavedLodgingKey(review.id, fabLodging.id))
+          ? savedLodgingIds.has(fabLodging.id)
           : false;
 
     const fabVisible = fabActivity !== null || fabLodging !== null;

@@ -6,8 +6,6 @@ import { ArrowLeft, BedDouble, Calendar, MapPin, Notebook, User } from "lucide-r
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import {
-    buildSavedActivityKey,
-    buildSavedLodgingKey,
     type MapActivity,
     type MapLodging,
     type MapTrip,
@@ -21,8 +19,8 @@ interface FullScreenReviewProps {
     onSelectActivity: (activity: MapActivity | null) => void;
     onSelectLodging: (lodging: MapLodging | null) => void;
     onOpenAuthorProfile: (userId: number) => void;
-    savedActivityKeys: ReadonlySet<string>;
-    savedLodgingKeys: ReadonlySet<string>;
+    savedActivityIds: ReadonlySet<number>;
+    savedLodgingIds: ReadonlySet<number>;
     onToggleSavedActivity: (tripId: number, activity: MapActivity) => void;
     onToggleSavedLodging: (tripId: number, lodging: MapLodging) => void;
 }
@@ -35,15 +33,15 @@ export default function FullScreenReview({
     onSelectActivity,
     onSelectLodging,
     onOpenAuthorProfile,
-    savedActivityKeys,
-    savedLodgingKeys,
+    savedActivityIds,
+    savedLodgingIds,
     onToggleSavedActivity,
     onToggleSavedLodging,
 }: FullScreenReviewProps) {
     const fabSaved = selectedActivity
-        ? savedActivityKeys.has(buildSavedActivityKey(review.id, selectedActivity.id))
+        ? savedActivityIds.has(selectedActivity.id)
         : selectedLodging
-          ? savedLodgingKeys.has(buildSavedLodgingKey(review.id, selectedLodging.id))
+          ? savedLodgingIds.has(selectedLodging.id)
           : false;
 
     const fabVisible = selectedActivity !== null || selectedLodging !== null;
