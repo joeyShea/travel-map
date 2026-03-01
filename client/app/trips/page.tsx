@@ -10,7 +10,7 @@ import PlacePicker, { type PlaceOption } from "@/components/place-picker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { createTrip } from "@/lib/api-client";
+import { createTrip, uploadImage } from "@/lib/api-client";
 import { AVAILABLE_TAGS, BANNER_PLACEHOLDER } from "@/lib/trip-constants";
 import type { TripDuration, TripVisibility } from "@/lib/api-types";
 
@@ -61,15 +61,6 @@ function makeStopDraft(): StopDraft {
   };
 }
 
-async function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
-    reader.onerror = () => reject(new Error("Unable to read selected image"));
-    reader.readAsDataURL(file);
-  });
-}
-
 export default function TripsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -77,6 +68,7 @@ export default function TripsPage() {
   const { status, isStudent } = useAuth();
 
   const [isSavingTrip, setIsSavingTrip] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [error, setError] = useState("");
 
   const [title, setTitle] = useState("");
@@ -228,10 +220,11 @@ export default function TripsPage() {
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                 <label className="inline-flex w-fit cursor-pointer items-center gap-2 rounded-full border border-stone-200 bg-white px-4 py-2 text-sm font-medium text-stone-700 transition-colors hover:bg-stone-100">
                   <ImagePlus className="h-4 w-4 text-amber-700" />
-                  Upload cover image
+                  {isUploadingImage ? "Uploading..." : "Upload cover image"}
                   <input
                     type="file"
                     accept="image/*"
+                    disabled={isUploadingImage}
                     className="sr-only"
                     onChange={async (event) => {
                       const file = event.target.files?.[0];
@@ -240,8 +233,16 @@ export default function TripsPage() {
                         return;
                       }
 
-                      const dataUrl = await fileToDataUrl(file);
-                      setCoverImage(dataUrl);
+                      try {
+                        setError("");
+                        setIsUploadingImage(true);
+                        const imageUrl = await uploadImage(file, "trips/cover");
+                        setCoverImage(imageUrl);
+                      } catch {
+                        setError("Could not upload cover image. Please try again.");
+                      } finally {
+                        setIsUploadingImage(false);
+                      }
                     }}
                   />
                 </label>
@@ -391,10 +392,11 @@ export default function TripsPage() {
                         />
                         <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-md border border-stone-200 bg-white px-3 py-2 text-sm text-stone-600 transition-colors hover:bg-stone-100">
                           <ImagePlus className="h-4 w-4 text-amber-700" />
-                          Add photo
+                          {isUploadingImage ? "Uploading..." : "Add photo"}
                           <input
                             type="file"
                             accept="image/*"
+                            disabled={isUploadingImage}
                             className="sr-only"
                             onChange={async (event) => {
                               const file = event.target.files?.[0];
@@ -402,8 +404,17 @@ export default function TripsPage() {
                                 updateStop("lodging", stop.id, { imageUrl: "" });
                                 return;
                               }
-                              const dataUrl = await fileToDataUrl(file);
-                              updateStop("lodging", stop.id, { imageUrl: dataUrl });
+
+                              try {
+                                setError("");
+                                setIsUploadingImage(true);
+                                const imageUrl = await uploadImage(file, "trips/lodging");
+                                updateStop("lodging", stop.id, { imageUrl });
+                              } catch {
+                                setError("Could not upload lodging image. Please try again.");
+                              } finally {
+                                setIsUploadingImage(false);
+                              }
                             }}
                           />
                         </label>
@@ -472,10 +483,11 @@ export default function TripsPage() {
                         />
                         <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-md border border-stone-200 bg-white px-3 py-2 text-sm text-stone-600 transition-colors hover:bg-stone-100">
                           <ImagePlus className="h-4 w-4 text-amber-700" />
-                          Add photo
+                          {isUploadingImage ? "Uploading..." : "Add photo"}
                           <input
                             type="file"
                             accept="image/*"
+                            disabled={isUploadingImage}
                             className="sr-only"
                             onChange={async (event) => {
                               const file = event.target.files?.[0];
@@ -483,8 +495,17 @@ export default function TripsPage() {
                                 updateStop("activity", stop.id, { imageUrl: "" });
                                 return;
                               }
-                              const dataUrl = await fileToDataUrl(file);
-                              updateStop("activity", stop.id, { imageUrl: dataUrl });
+
+                              try {
+                                setError("");
+                                setIsUploadingImage(true);
+                                const imageUrl = await uploadImage(file, "trips/activity");
+                                updateStop("activity", stop.id, { imageUrl });
+                              } catch {
+                                setError("Could not upload activity image. Please try again.");
+                              } finally {
+                                setIsUploadingImage(false);
+                              }
                             }}
                           />
                         </label>

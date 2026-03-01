@@ -276,6 +276,21 @@ def _parse_trip_date(value: Any) -> str | None:
     raise TripValidationError("date must use YYYY-MM, MM-YYYY, MM-YY, or 'Month YYYY'")
 
 
+def _parse_thumbnail_url(value: Any) -> str | None:
+    candidate = to_nullable_string(value)
+    if not candidate:
+        return None
+
+    lowered = candidate.lower()
+    if lowered.startswith("data:"):
+        raise TripValidationError("thumbnail_url must be an image URL, not base64 data")
+
+    if not (lowered.startswith("http://") or lowered.startswith("https://")):
+        raise TripValidationError("thumbnail_url must start with http:// or https://")
+
+    return candidate
+
+
 def _insert_tags(cur, *, trip_id: int, tags: list[Any]):
     for tag in tags:
         clean_tag = to_nullable_string(tag)
@@ -314,7 +329,7 @@ def _insert_lodgings(cur, *, trip_id: int, lodgings: list[Any]):
             (
                 trip_id,
                 to_nullable_string(lodging.get("address")),
-                to_nullable_string(lodging.get("thumbnail_url")),
+                _parse_thumbnail_url(lodging.get("thumbnail_url")),
                 to_nullable_string(lodging.get("title")),
                 to_nullable_string(lodging.get("description")),
                 to_nullable_string(lodging.get("latitude")),
@@ -347,7 +362,7 @@ def _insert_activities(cur, *, trip_id: int, activities: list[Any]):
             (
                 trip_id,
                 to_nullable_string(activity.get("address")),
-                to_nullable_string(activity.get("thumbnail_url")),
+                _parse_thumbnail_url(activity.get("thumbnail_url")),
                 to_nullable_string(activity.get("title")),
                 to_nullable_string(activity.get("location")),
                 to_nullable_string(activity.get("description")),
@@ -393,7 +408,7 @@ def create_trip(*, owner_user_id: int, payload: dict[str, Any]) -> dict[str, Any
             RETURNING trip_id
             """,
             (
-                to_nullable_string(payload.get("thumbnail_url")),
+                _parse_thumbnail_url(payload.get("thumbnail_url")),
                 title,
                 to_nullable_string(payload.get("description")),
                 to_nullable_string(payload.get("latitude")),
@@ -462,7 +477,7 @@ def add_lodging(*, trip_id: int, owner_user_id: int, payload: dict[str, Any]) ->
             (
                 trip_id,
                 to_nullable_string(payload.get("address")),
-                to_nullable_string(payload.get("thumbnail_url")),
+                _parse_thumbnail_url(payload.get("thumbnail_url")),
                 title,
                 to_nullable_string(payload.get("description")),
                 to_nullable_string(payload.get("latitude")),
@@ -508,7 +523,7 @@ def add_activity(*, trip_id: int, owner_user_id: int, payload: dict[str, Any]) -
             (
                 trip_id,
                 to_nullable_string(payload.get("address")),
-                to_nullable_string(payload.get("thumbnail_url")),
+                _parse_thumbnail_url(payload.get("thumbnail_url")),
                 title,
                 to_nullable_string(payload.get("location")),
                 to_nullable_string(payload.get("description")),

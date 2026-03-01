@@ -9,3 +9,4 @@ werkzeug
 flask
 flask_session
 bcrypt
+Pillow

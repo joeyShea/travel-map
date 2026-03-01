@@ -3,18 +3,28 @@
 import { useEffect, useRef, useCallback } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import type { MapActivity, MapTrip } from "@/lib/trip-models";
+import type { MapActivity, MapTrip, MapLodging } from "@/lib/trip-models";
 
 interface MapViewProps {
     trips: MapTrip[];
     selectedTrip: MapTrip | null;
     fullScreenTrip: MapTrip | null;
-    selectedActivity: MapActivity | null;
+    selectedActivity: MapActivity | MapLodging | null;
     onSelectTripById: (tripId: number | null) => void;
-    onSelectActivity: (activity: MapActivity | null) => void;
+    onSelectActivity: (activity: MapActivity | MapLodging | null) => void;
 }
 
 const SELECTED_REVIEW_ZOOM = 16;
+const MARKER_FALLBACK_IMAGE = "/images/nyc.jpg";
+
+function escapeHtml(value: string): string {
+    return value
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+}
 
 export default function MapView({
     trips,
@@ -82,6 +92,9 @@ export default function MapView({
 
     const createPhotoIcon = useCallback((trip: MapTrip, isActive: boolean) => {
         const size = isActive ? 80 : 64;
+        const safeTitle = escapeHtml(trip.title);
+        const imageUrl = trip.thumbnail || MARKER_FALLBACK_IMAGE;
+
         return L.divIcon({
             className: "photo-marker",
             html: `
@@ -97,10 +110,10 @@ export default function MapView({
           position: relative;
         ">
           <img
-            src="${trip.thumbnail}"
-            alt="${trip.title}"
+                        src="${imageUrl}"
+                        alt="${safeTitle}"
             style="width:100%;height:100%;object-fit:cover;"
-            crossorigin="anonymous"
+                        onerror="this.onerror=null;this.src='${MARKER_FALLBACK_IMAGE}';"
           />
           <div style="
             position: absolute;
@@ -114,7 +127,7 @@ export default function MapView({
             font-weight: 600;
             font-family: system-ui, sans-serif;
             letter-spacing: 0.02em;
-          ">${trip.title}</div>
+                    ">${safeTitle}</div>
         </div>
       `,
             iconSize: [size, size],
@@ -123,7 +136,10 @@ export default function MapView({
     }, []);
 
     const createActivityIcon = useCallback((activity: MapActivity, isActive: boolean) => {
-        const size = isActive ? 60 : 48;
+        const size = isActive ? 80 : 65;
+        const safeTitle = escapeHtml(activity.title);
+        const imageUrl = activity.image || MARKER_FALLBACK_IMAGE;
+
         return L.divIcon({
             className: "activity-marker",
             html: `
@@ -138,10 +154,10 @@ export default function MapView({
           transition: all 0.2s ease;
         ">
           <img
-            src="${activity.image}"
-            alt="${activity.title}"
+                        src="${imageUrl}"
+                        alt="${safeTitle}"
             style="width:100%;height:100%;object-fit:cover;"
-            crossorigin="anonymous"
+                        onerror="this.onerror=null;this.src='${MARKER_FALLBACK_IMAGE}';"
           />
         </div>
       `,
@@ -149,6 +165,62 @@ export default function MapView({
             iconAnchor: [size / 2, size / 2],
         });
     }, []);
+
+        const createLodgingIcon = useCallback((lodging: MapLodging, isActive: boolean) => {
+                const size = isActive ? 80 : 65;
+                const roofHeight = Math.round(size * 0.34);
+                const houseBodyHeight = size - roofHeight;
+                const safeTitle = escapeHtml(lodging.name);
+                const imageUrl = lodging.image || MARKER_FALLBACK_IMAGE;
+
+                return L.divIcon({
+                        className: "lodging-marker",
+                        html: `
+                <div style="
+                    width: ${size}px;
+                    height: ${size}px;
+                    position: relative;
+                    cursor: pointer;
+                    transition: all 0.2s ease;
+                ">
+                    <div style="
+                        position: absolute;
+                        top: 0;
+                        left: 50%;
+                        transform: translateX(-50%);
+                        width: 0;
+                        height: 0;
+                        border-left: ${Math.round(size / 2)}px solid transparent;
+                        border-right: ${Math.round(size / 2)}px solid transparent;
+                        border-bottom: ${roofHeight}px solid ${isActive ? "#d4a055" : "#000"};
+                        filter: drop-shadow(0 3px 8px rgba(0,0,0,0.45));
+                    "></div>
+                    <div style="
+                        position: absolute;
+                        top: ${Math.max(roofHeight - 2, 0)}px;
+                        left: 50%;
+                        transform: translateX(-50%);
+                        width: ${Math.round(size * 0.78)}px;
+                        height: ${houseBodyHeight}px;
+                        border-radius: 0 0 10px 10px;
+                        overflow: hidden;
+                        border: ${isActive ? "3px solid #d4a055" : "2px solid #000"};
+                        box-shadow: 0 4px 14px rgba(0,0,0,0.45);
+                        background: #111;
+                    ">
+                        <img
+                            src="${imageUrl}"
+                            alt="${safeTitle}"
+                            style="width:100%;height:100%;object-fit:cover;"
+                            onerror="this.onerror=null;this.src='${MARKER_FALLBACK_IMAGE}';"
+                        />
+                    </div>
+                </div>
+            `,
+                        iconSize: [size, size],
+                        iconAnchor: [size / 2, size / 2],
+                });
+        }, []);
 
     // Create/update review markers
     useEffect(() => {
@@ -197,7 +269,21 @@ export default function MapView({
                 });
             activityMarkersRef.current.push(marker);
         });
-    }, [fullScreenTrip, selectedActivity, createActivityIcon, onSelectActivity]);
+
+        (fullScreenTrip.lodging || []).forEach((lodging) => {
+            const isActive = selectedActivity?.id === lodging.id;
+            const icon = createLodgingIcon(lodging, isActive);
+            const marker = L.marker([lodging.lat, lodging.lng], { icon })
+                .addTo(map)
+                .on("click", () => {
+                    onSelectActivity(lodging);
+                    map.flyTo([lodging.lat, lodging.lng], 13, {
+                        duration: 1,
+                    });
+                });
+            activityMarkersRef.current.push(marker);
+        });
+    }, [fullScreenTrip, selectedActivity, createActivityIcon, createLodgingIcon, onSelectActivity]);
 
     // Fly to selected review in sidebar mode
     useEffect(() => {

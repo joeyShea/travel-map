@@ -13,7 +13,7 @@ import StudentAddMenu from "@/components/student-add-menu";
 import UserProfileModal, { type UserProfile } from "@/components/user-profile-modal";
 import { getTrip, getTrips, getUserProfile } from "@/lib/api-client";
 import type { UserProfileResponse } from "@/lib/api-types";
-import type { MapActivity, MapTrip, ModalProfile } from "@/lib/trip-models";
+import type { MapActivity, MapLodging, MapTrip, ModalProfile } from "@/lib/trip-models";
 import { toMapTrip, toModalProfile } from "@/lib/trip-models";
 
 const MapView = dynamic(() => import("@/components/map-view"), {
@@ -41,6 +41,7 @@ function toUserProfile(profile: ModalProfile): UserProfile {
     university: profile.university,
     bio: profile.bio,
     trips: profile.trips,
+    image_url: profile.image_url,
   };
 }
 
@@ -56,7 +57,7 @@ export default function TravelMap() {
   const [trips, setTrips] = useState<MapTrip[]>([]);
   const [selectedTrip, setSelectedTrip] = useState<MapTrip | null>(null);
   const [fullScreenTrip, setFullScreenTrip] = useState<MapTrip | null>(null);
-  const [selectedActivity, setSelectedActivity] = useState<MapActivity | null>(null);
+  const [selectedActivity, setSelectedActivity] = useState<MapActivity | MapLodging | null>(null);
   const [profileState, setProfileState] = useState<ProfileState | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchPanelOpen, setSearchPanelOpen] = useState(false);
@@ -171,7 +172,7 @@ export default function TravelMap() {
     setSelectedActivity(null);
   }, [fullScreenTrip]);
 
-  const handleSelectActivity = useCallback((activity: MapActivity | null) => {
+  const handleSelectActivity = useCallback((activity: MapActivity | MapLodging | null) => {
     setSelectedActivity(activity);
   }, []);
 

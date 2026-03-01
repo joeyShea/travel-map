@@ -12,6 +12,27 @@ interface SidebarPanelProps {
   onOpenAuthorProfile: (userId: number) => void
 }
 
+function formatTripDate(value: string): string {
+  const trimmed = value.trim()
+  const match = /^(\d{4})-(\d{2})(?:-\d{2})?$/.exec(trimmed)
+  if (!match) {
+    return value
+  }
+
+  const year = Number(match[1])
+  const month = Number(match[2])
+  if (!Number.isInteger(year) || month < 1 || month > 12) {
+    return value
+  }
+
+  const date = new Date(Date.UTC(year, month - 1, 1))
+  return new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(date)
+}
+
 export default function SidebarPanel({ review, onClose, onViewFull, onOpenAuthorProfile }: SidebarPanelProps) {
   return (
     <div className="flex h-full w-full flex-col bg-card border-r border-border">
@@ -47,7 +68,7 @@ export default function SidebarPanel({ review, onClose, onViewFull, onOpenAuthor
             </button>
             <span className="flex items-center gap-1.5">
               <Calendar className="h-3.5 w-3.5" />
-              {review.date}
+              {formatTripDate(review.date)}
             </span>
           </div>
 
@@ -77,6 +98,32 @@ export default function SidebarPanel({ review, onClose, onViewFull, onOpenAuthor
               </div>
             ))}
           </div>
+
+          {/* Lodging preview */}
+          { review.lodging && (
+          <div className="flex flex-col gap-3">
+            <h3 className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+              Lodging
+            </h3>
+            {review.lodging?.map((lodge) => (
+              <div
+                key={lodge.id}
+                className="flex items-center gap-3 rounded-lg bg-secondary/60 p-3 transition-colors hover:bg-secondary"
+              >
+                <div className="relative h-12 w-12 flex-shrink-0 overflow-hidden rounded-md">
+                  <Image src={lodge.image} alt={lodge.name} fill className="object-cover" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate">{lodge.name}</p>
+                  <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <MapPin className="h-3 w-3" />
+                    {lodge.lat.toFixed(2)}, {lodge.lng.toFixed(2)}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+          )}
 
           {/* View full button */}
           <button

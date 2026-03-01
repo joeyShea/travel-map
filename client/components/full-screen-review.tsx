@@ -2,15 +2,15 @@
 
 import Image from "next/image"
 import { ArrowLeft, MapPin, Calendar, User } from "lucide-react"
-import type { MapActivity, MapTrip } from "@/lib/trip-models"
+import type { MapActivity, MapLodging, MapTrip } from "@/lib/trip-models"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 
 interface FullScreenReviewProps {
   review: MapTrip
-  selectedActivity: MapActivity | null
+  selectedActivity: MapActivity | MapLodging | null
   onBack: () => void
-  onSelectActivity: (activity: MapActivity | null) => void
+  onSelectActivity: (activity: MapActivity | MapLodging | null) => void
   onOpenAuthorProfile: (userId: number) => void
 }
 
@@ -93,6 +93,32 @@ export default function FullScreenReview({
                     </span>
                   </div>
                   <p className="text-sm leading-relaxed text-foreground/70">{activity.description}</p>
+                </div>
+              </button>
+            ))}
+            {review.lodging?.map((lodge) => (
+              <button
+                key={lodge.id}
+                onClick={() => onSelectActivity(selectedActivity?.id === lodge.id ? null : lodge)}
+                className={cn(
+                  "flex flex-col gap-3 rounded-xl border p-3 text-left transition-all",
+                  selectedActivity?.id === lodge.id
+                    ? "border-primary bg-primary/8 shadow-sm shadow-primary/10"
+                    : "border-border bg-secondary/40 hover:bg-secondary/70"
+                )}
+              >
+                <div className="relative h-40 w-full overflow-hidden rounded-lg">
+                  <Image src={lodge.image} alt={lodge.name} fill className="object-cover" />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className="text-base font-semibold text-foreground">{lodge.name}</h3>
+                    <span className="flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs text-muted-foreground flex-shrink-0">
+                      <MapPin className="h-3 w-3" />
+                      {lodge.lat.toFixed(2)}, {lodge.lng.toFixed(2)}
+                    </span>
+                  </div>
+                  <p className="text-sm leading-relaxed text-foreground/70">{lodge.description}</p>
                 </div>
               </button>
             ))}

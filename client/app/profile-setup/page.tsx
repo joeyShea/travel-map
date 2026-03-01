@@ -3,7 +3,7 @@
 import { ChangeEvent, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Camera, GraduationCap, UserRound, Globe, ArrowRight } from "lucide-react";
-import { createProfileSetup } from "@/lib/api-client";
+import { createProfileSetup, uploadImage } from "@/lib/api-client";
 import { useAuth } from "@/components/auth-provider";
 
 type AccountType = "student" | "traveler";
@@ -17,15 +17,6 @@ interface ProfileSetupPayload {
     profileImageUrl: string | null;
 }
 
-async function fileToDataUrl(file: File): Promise<string> {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
-        reader.onerror = () => reject(new Error("Unable to read selected image"));
-        reader.readAsDataURL(file);
-    });
-}
-
 async function updateUserProfileInDatabase(payload: ProfileSetupPayload): Promise<void> {
     await createProfileSetup({
         account_type: payload.accountType,
@@ -36,33 +27,6 @@ async function updateUserProfileInDatabase(payload: ProfileSetupPayload): Promis
 }
 
 const TRANSITION_MS = 260;
-const UNIVERSITY_OPTIONS = [
-    "University of California, Berkeley",
-    "University of California, Los Angeles",
-    "University of Southern California",
-    "Stanford University",
-    "Harvard University",
-    "Yale University",
-    "Princeton University",
-    "Columbia University",
-    "Cornell University",
-    "New York University",
-    "University of Michigan",
-    "Michigan State University",
-    "University of Texas at Austin",
-    "Texas A&M University",
-    "University of Florida",
-    "Florida State University",
-    "Ohio State University",
-    "Pennsylvania State University",
-    "University of Illinois Urbana-Champaign",
-    "University of Washington",
-    "University of Wisconsin-Madison",
-    "University of North Carolina at Chapel Hill",
-    "Duke University",
-    "University of Chicago",
-    "Northwestern University",
-];
 
 export default function ProfileSetupPage() {
     const router = useRouter();
@@ -76,6 +40,7 @@ export default function ProfileSetupPage() {
     const [profileImageFile, setProfileImageFile] = useState<File | null>(null);
     const [profileImagePreviewUrl, setProfileImagePreviewUrl] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
+    const [saveError, setSaveError] = useState("");
     const [stepIndex, setStepIndex] = useState(0);
     const [stepPhase, setStepPhase] = useState<StepPhase>("in");
     const [isTransitioning, setIsTransitioning] = useState(false);
@@ -151,10 +116,11 @@ export default function ProfileSetupPage() {
     }
 
     async function handleFinishSetup() {
+        setSaveError("");
         setIsSaving(true);
 
         try {
-            const profileImageUrl = profileImageFile ? await fileToDataUrl(profileImageFile) : null;
+            const profileImageUrl = profileImageFile ? await uploadImage(profileImageFile, "profiles") : null;
             await updateUserProfileInDatabase({ bio, college, accountType, profileImageUrl });
             const authedUser = await refreshSession();
             if (authedUser?.user_id) {
@@ -162,6 +128,8 @@ export default function ProfileSetupPage() {
             }
             router.push("/");
             router.refresh();
+        } catch {
+            setSaveError("Could not save profile setup right now. Please try again.");
         } finally {
             setIsSaving(false);
         }
@@ -389,6 +357,8 @@ export default function ProfileSetupPage() {
                         <ArrowRight className="h-4 w-4" />
                     </button>
                 </div>
+
+                {saveError ? <p className="mt-3 text-sm text-red-500">{saveError}</p> : null}
             </div>
         </div>
     );
