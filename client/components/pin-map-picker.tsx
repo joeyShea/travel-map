@@ -59,14 +59,20 @@ export default function PinMapPicker({
     const map = L.map(mapContainerRef.current, {
       center: mapCenter,
       zoom: initialZoom,
-      zoomControl: true,
-      attributionControl: true,
+      minZoom: 4,
+      maxBounds: L.latLngBounds([13, -180], [76, -60]),
+      maxBoundsViscosity: 1.0,
+      zoomControl: false,
+      attributionControl: false,
     });
 
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19,
-      attribution: "&copy; OpenStreetMap contributors",
-    }).addTo(map);
+    L.tileLayer("https://tile.jawg.io/jawg-sunny/{z}/{x}/{y}{r}.png?access-token={accessToken}", {
+      maxZoom: 22,
+      minZoom: 4,
+      accessToken: process.env.NEXT_PUBLIC_JAWG_API_KEY ?? "",
+    } as L.TileLayerOptions & { accessToken: string }).addTo(map);
+
+    L.control.zoom({ position: "bottomright" }).addTo(map);
 
     mapRef.current = map;
 

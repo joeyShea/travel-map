@@ -69,6 +69,7 @@ export default function TravelMap() {
     const [selectedTrip, setSelectedTrip] = useState<MapTrip | null>(null);
     const [fullScreenTrip, setFullScreenTrip] = useState<MapTrip | null>(null);
     const [selectedActivity, setSelectedActivity] = useState<MapActivity | null>(null);
+    const [selectedLodging, setSelectedLodging] = useState<MapLodging | null>(null);
     const [profileState, setProfileState] = useState<ProfileState | null>(null);
     const [searchQuery, setSearchQuery] = useState("");
     const [searchPanelOpen, setSearchPanelOpen] = useState(false);
@@ -171,6 +172,7 @@ export default function TravelMap() {
                 setSelectedTrip(null);
                 setFullScreenTrip(null);
                 setSelectedActivity(null);
+                setSelectedLodging(null);
                 setPlansPanelOpen(false);
                 setIsLoadingTripById(false);
                 return;
@@ -197,6 +199,7 @@ export default function TravelMap() {
                 setSelectedTrip(mappedTrip);
                 setFullScreenTrip(null);
                 setSelectedActivity(null);
+                setSelectedLodging(null);
                 setSearchPanelOpen(false);
                 setSearchQuery("");
                 setPlansPanelOpen(false);
@@ -215,6 +218,7 @@ export default function TravelMap() {
         setFullScreenTrip(trip);
         setSelectedTrip(null);
         setSelectedActivity(null);
+        setSelectedLodging(null);
         setSearchPanelOpen(false);
         setSearchQuery("");
         setPlansPanelOpen(false);
@@ -224,11 +228,20 @@ export default function TravelMap() {
         setSelectedTrip(fullScreenTrip);
         setFullScreenTrip(null);
         setSelectedActivity(null);
+        setSelectedLodging(null);
     }, [fullScreenTrip]);
 
     const handleSelectActivity = useCallback((activity: MapActivity | null) => {
         setSelectedActivity(activity);
         if (activity) {
+            setSelectedLodging(null);
+        }
+    }, []);
+
+    const handleSelectLodging = useCallback((lodging: MapLodging | null) => {
+        setSelectedLodging(lodging);
+        if (lodging) {
+            setSelectedActivity(null);
         }
     }, []);
 
@@ -267,6 +280,7 @@ export default function TravelMap() {
         setSelectedTrip(previousTrip);
         setFullScreenTrip(null);
         setSelectedActivity(null);
+        setSelectedLodging(null);
     }, [selectedTripLocationIndex, tripsAtSelectedLocation]);
 
     const handleShowNextTripAtLocation = useCallback(() => {
@@ -284,6 +298,7 @@ export default function TravelMap() {
         setSelectedTrip(nextTrip);
         setFullScreenTrip(null);
         setSelectedActivity(null);
+        setSelectedLodging(null);
     }, [selectedTripLocationIndex, tripsAtSelectedLocation]);
 
     const openProfile = useCallback(
@@ -354,6 +369,7 @@ export default function TravelMap() {
                 setSelectedTrip((current) => (current?.id === tripId ? null : current));
                 setFullScreenTrip((current) => (current?.id === tripId ? null : current));
                 setSelectedActivity(null);
+                setSelectedLodging(null);
 
                 setProfileState((current) => {
                     if (!current || current.profile.userId !== userId) {
@@ -402,6 +418,7 @@ export default function TravelMap() {
             setSelectedTrip(null);
             setFullScreenTrip(null);
             setSelectedActivity(null);
+            setSelectedLodging(null);
         } else {
             setSearchPanelOpen(false);
         }
@@ -417,6 +434,7 @@ export default function TravelMap() {
                 setSelectedTrip(null);
                 setFullScreenTrip(null);
                 setSelectedActivity(null);
+                setSelectedLodging(null);
             }
 
             return next;
@@ -503,7 +521,9 @@ export default function TravelMap() {
                             savedActivityKeys={savedActivityKeySet}
                             onToggleSavedActivity={handleToggleSavedActivity}
                             selectedActivityId={selectedActivity?.id ?? null}
+                            selectedLodgingId={selectedLodging?.id ?? null}
                             onSelectActivity={handleSelectActivity}
+                            onSelectLodging={handleSelectLodging}
                             locationTripCount={tripsAtSelectedLocation.length}
                             locationTripPosition={selectedTripLocationIndex >= 0 ? selectedTripLocationIndex + 1 : 1}
                             onShowPreviousTripAtLocation={handleShowPreviousTripAtLocation}
@@ -519,8 +539,10 @@ export default function TravelMap() {
                         <FullScreenReview
                             review={fullScreenTrip}
                             selectedActivity={selectedActivity}
+                            selectedLodging={selectedLodging}
                             onBack={handleBack}
                             onSelectActivity={handleSelectActivity}
+                            onSelectLodging={handleSelectLodging}
                             onOpenAuthorProfile={(profileUserId) => {
                                 void openProfile(profileUserId, "left");
                             }}
@@ -561,10 +583,12 @@ export default function TravelMap() {
                         selectedTrip={selectedTrip}
                         fullScreenTrip={fullScreenTrip}
                         selectedActivity={selectedActivity}
+                        selectedLodging={selectedLodging}
                         onSelectTripById={(tripId) => {
                             void openTripById(tripId);
                         }}
                         onSelectActivity={handleSelectActivity}
+                        onSelectLodging={handleSelectLodging}
                     />
                 </div>
             </div>

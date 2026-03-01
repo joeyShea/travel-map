@@ -11,14 +11,18 @@ interface MapViewProps {
     selectedTrip: MapTrip | null;
     fullScreenTrip: MapTrip | null;
     selectedActivity: MapActivity | null;
+    selectedLodging: MapLodging | null;
     onSelectTripById: (tripId: number | null) => void;
     onSelectActivity: (activity: MapActivity | null) => void;
+    onSelectLodging: (lodging: MapLodging | null) => void;
 }
 
 const MARKER_FALLBACK_IMAGE = "/images/nyc.jpg";
 const STORED_MAP_VIEW_KEY = "travel-map:view:v1";
 const SELECTED_REVIEW_ZOOM = 16;
 const DETAIL_ZOOM = 13;
+const INITIAL_USER_ZOOM = 10;
+const FULL_SCREEN_MAX_ZOOM = 12;
 
 let hasAutoCenteredOnUser = false;
 
@@ -103,8 +107,10 @@ export default function MapView({
     selectedTrip,
     fullScreenTrip,
     selectedActivity,
+    selectedLodging,
     onSelectTripById,
     onSelectActivity,
+    onSelectLodging,
 }: MapViewProps) {
     const mapRef = useRef<L.Map | null>(null);
     const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -115,6 +121,7 @@ export default function MapView({
     const selectedTripRef = useRef<MapTrip | null>(null);
     const fullScreenTripRef = useRef<MapTrip | null>(null);
     const selectedActivityRef = useRef<MapActivity | null>(null);
+    const selectedLodgingRef = useRef<MapLodging | null>(null);
     useEffect(() => {
         selectedTripRef.current = selectedTrip;
     }, [selectedTrip]);
@@ -126,6 +133,10 @@ export default function MapView({
     useEffect(() => {
         selectedActivityRef.current = selectedActivity;
     }, [selectedActivity]);
+
+    useEffect(() => {
+        selectedLodgingRef.current = selectedLodging;
+    }, [selectedLodging]);
 
     useEffect(() => {
         if (!mapContainerRef.current || mapRef.current) {
@@ -170,14 +181,17 @@ export default function MapView({
                     if (
                         selectedTripRef.current !== null ||
                         fullScreenTripRef.current !== null ||
-                        selectedActivityRef.current !== null
+                        selectedActivityRef.current !== null ||
+                        selectedLodgingRef.current !== null
                     ) {
                         hasAutoCenteredOnUser = true;
                         return;
                     }
 
                     hasAutoCenteredOnUser = true;
-                    map.flyTo([position.coords.latitude, position.coords.longitude], 12, { duration: 1.2 });
+                    map.flyTo([position.coords.latitude, position.coords.longitude], INITIAL_USER_ZOOM, {
+                        duration: 1.2,
+                    });
                 },
                 () => {
                     hasAutoCenteredOnUser = true;
@@ -329,34 +343,46 @@ export default function MapView({
         detailMarkersRef.current.forEach((marker) => marker.remove());
         detailMarkersRef.current = [];
 
-        if (!fullScreenTrip) {
+        const focusTrip = fullScreenTrip ?? selectedTrip;
+        if (!focusTrip) {
             return;
         }
 
-        for (const activity of fullScreenTrip.activities) {
+        for (const activity of focusTrip.activities) {
             const marker = L.marker([activity.lat, activity.lng], {
                 icon: createActivityIcon(activity, selectedActivity?.id === activity.id),
             })
                 .addTo(map)
                 .on("click", () => {
                     onSelectActivity(activity);
+                    onSelectLodging(null);
                     map.flyTo([activity.lat, activity.lng], DETAIL_ZOOM, { duration: 0.9 });
                 });
             detailMarkersRef.current.push(marker);
         }
 
-        for (const lodging of fullScreenTrip.lodgings) {
+        for (const lodging of focusTrip.lodgings) {
             const marker = L.marker([lodging.lat, lodging.lng], {
-                icon: createLodgingIcon(lodging, false),
+                icon: createLodgingIcon(lodging, selectedLodging?.id === lodging.id),
             })
                 .addTo(map)
                 .on("click", () => {
                     onSelectActivity(null);
+                    onSelectLodging(lodging);
                     map.flyTo([lodging.lat, lodging.lng], DETAIL_ZOOM, { duration: 0.9 });
                 });
             detailMarkersRef.current.push(marker);
         }
-    }, [fullScreenTrip, selectedActivity, createActivityIcon, createLodgingIcon, onSelectActivity]);
+    }, [
+        fullScreenTrip,
+        selectedTrip,
+        selectedActivity,
+        selectedLodging,
+        createActivityIcon,
+        createLodgingIcon,
+        onSelectActivity,
+        onSelectLodging,
+    ]);
 
     useEffect(() => {
         const map = mapRef.current;
@@ -380,6 +406,35 @@ export default function MapView({
 
     useEffect(() => {
         const map = mapRef.current;
+        if (!map || !fullScreenTrip) {
+            return;
+        }
+
+        const points: [number, number][] = [[fullScreenTrip.lat, fullScreenTrip.lng]];
+        fullScreenTrip.activities.forEach((activity) => {
+            points.push([activity.lat, activity.lng]);
+        });
+        fullScreenTrip.lodgings.forEach((lodging) => {
+            points.push([lodging.lat, lodging.lng]);
+        });
+
+        const bounds = L.latLngBounds(points);
+        if (!bounds.isValid()) {
+            return;
+        }
+
+        map.flyToBounds(bounds, {
+            padding: [56, 56],
+            maxZoom: FULL_SCREEN_MAX_ZOOM,
+            duration: 1.1,
+        });
+
+        // Force a closer re-focus when the user exits full-screen back to sidebar.
+        lastFocusedLocationKeyRef.current = null;
+    }, [fullScreenTrip]);
+
+    useEffect(() => {
+        const map = mapRef.current;
         if (!map) {
             return;
         }
@@ -393,8 +448,17 @@ export default function MapView({
             return;
         }
 
+        if (selectedLodging) {
+            const key = `lodging:${selectedLodging.id}`;
+            if (lastFocusedDetailKeyRef.current !== key) {
+                lastFocusedDetailKeyRef.current = key;
+                map.flyTo([selectedLodging.lat, selectedLodging.lng], DETAIL_ZOOM, { duration: 0.8 });
+            }
+            return;
+        }
+
         lastFocusedDetailKeyRef.current = null;
-    }, [selectedActivity]);
+    }, [selectedActivity, selectedLodging]);
 
     useEffect(() => {
         const map = mapRef.current;

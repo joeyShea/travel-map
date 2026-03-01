@@ -14,7 +14,9 @@ interface SidebarPanelProps {
     savedActivityKeys: ReadonlySet<string>;
     onToggleSavedActivity: (tripId: number, activity: MapActivity) => void;
     selectedActivityId: number | null;
+    selectedLodgingId: number | null;
     onSelectActivity: (activity: MapActivity | null) => void;
+    onSelectLodging: (lodging: MapLodging | null) => void;
     locationTripCount: number;
     locationTripPosition: number;
     onShowPreviousTripAtLocation: () => void;
@@ -52,7 +54,9 @@ export default function SidebarPanel({
     savedActivityKeys,
     onToggleSavedActivity,
     selectedActivityId,
+    selectedLodgingId,
     onSelectActivity,
+    onSelectLodging,
     locationTripCount,
     locationTripPosition,
     onShowPreviousTripAtLocation,
@@ -135,10 +139,10 @@ export default function SidebarPanel({
                                 <button
                                     type="button"
                                     key={lodging.id}
-                                    onClick={() => onSelectActivity(selectedActivityId === lodging.id ? null : lodging)}
+                                    onClick={() => onSelectLodging(selectedLodgingId === lodging.id ? null : lodging)}
                                     className={cn(
                                         "flex w-full items-center gap-3 rounded-lg p-3 text-left transition-colors",
-                                        selectedActivityId === lodging.id
+                                        selectedLodgingId === lodging.id
                                             ? "bg-primary/10 ring-1 ring-primary/30"
                                             : "bg-secondary/40 hover:bg-secondary/60",
                                     )}
@@ -147,8 +151,10 @@ export default function SidebarPanel({
                                         <Image src={lodging.image} alt={lodging.title} fill className="object-cover" />
                                     </div>
                                     <div className="min-w-0 flex-1">
-                                        <p className="truncate text-sm font-medium text-foreground">{lodging.title}</p>
-                                        <p className="truncate text-xs text-muted-foreground">{lodging.address}</p>
+                                        <p className="text-sm font-medium text-foreground break-words">{lodging.title}</p>
+                                        <p className="text-xs text-muted-foreground break-words whitespace-normal">
+                                            {lodging.address}
+                                        </p>
                                     </div>
                                 </button>
                             ))
@@ -192,12 +198,12 @@ export default function SidebarPanel({
                                                 />
                                             </div>
                                             <div className="flex-1 min-w-0">
-                                                <p className="truncate text-sm font-medium text-foreground">
+                                                <p className="text-sm font-medium text-foreground break-words">
                                                     {activity.title}
                                                 </p>
-                                                <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                                                <p className="flex items-start gap-1 text-xs text-muted-foreground break-words whitespace-normal">
                                                     <MapPin className="h-3 w-3" />
-                                                    {activity.lat.toFixed(2)}, {activity.lng.toFixed(2)}
+                                                    <span className="min-w-0">{activity.address}</span>
                                                 </p>
                                             </div>
                                         </button>

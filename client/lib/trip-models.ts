@@ -5,6 +5,7 @@ export interface MapActivity {
   title: string;
   description: string;
   image: string;
+  address: string;
   lat: number;
   lng: number;
 }
@@ -111,6 +112,7 @@ function toActivity(activity: TripActivity): MapActivity | null {
     title: activity.title || "Untitled activity",
     description: activity.description || "No description yet.",
     image: activity.thumbnail_url || PLACEHOLDER_IMAGE,
+    address: activity.address || activity.location || "Location not provided",
     lat: activity.latitude,
     lng: activity.longitude,
   };

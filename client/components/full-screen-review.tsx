@@ -10,8 +10,10 @@ import { buildSavedActivityKey, type MapActivity, type MapLodging, type MapTrip 
 interface FullScreenReviewProps {
     review: MapTrip;
     selectedActivity: MapActivity | null;
+    selectedLodging: MapLodging | null;
     onBack: () => void;
     onSelectActivity: (activity: MapActivity | null) => void;
+    onSelectLodging: (lodging: MapLodging | null) => void;
     onOpenAuthorProfile: (userId: number) => void;
     savedActivityKeys: ReadonlySet<string>;
     onToggleSavedActivity: (tripId: number, activity: MapActivity) => void;
@@ -20,8 +22,10 @@ interface FullScreenReviewProps {
 export default function FullScreenReview({
     review,
     selectedActivity,
+    selectedLodging,
     onBack,
     onSelectActivity,
+    onSelectLodging,
     onOpenAuthorProfile,
     savedActivityKeys,
     onToggleSavedActivity,
@@ -73,9 +77,16 @@ export default function FullScreenReview({
                         </h2>
                         {review.lodgings.length > 0 ? (
                             review.lodgings.map((lodging) => (
-                                <div
+                                <button
+                                    type="button"
                                     key={lodging.id}
-                                    className="w-full rounded-xl border border-border bg-secondary/30 p-3"
+                                    onClick={() => onSelectLodging(selectedLodging?.id === lodging.id ? null : lodging)}
+                                    className={cn(
+                                        "w-full rounded-xl border p-3 text-left transition-colors",
+                                        selectedLodging?.id === lodging.id
+                                            ? "border-primary bg-primary/8 shadow-sm shadow-primary/10"
+                                            : "border-border bg-secondary/30 hover:bg-secondary/50",
+                                    )}
                                 >
                                     <div className="grid gap-3 sm:grid-cols-[8rem,1fr]">
                                         <div className="relative h-28 w-full overflow-hidden rounded-lg sm:h-24">
@@ -88,13 +99,15 @@ export default function FullScreenReview({
                                         </div>
                                         <div className="flex min-w-0 flex-col gap-1.5">
                                             <h3 className="text-base font-semibold text-foreground">{lodging.title}</h3>
-                                            <p className="truncate text-xs text-muted-foreground">{lodging.address}</p>
+                                            <p className="text-xs text-muted-foreground break-words whitespace-normal">
+                                                {lodging.address}
+                                            </p>
                                             <p className="text-sm leading-relaxed text-foreground/70">
                                                 {lodging.description}
                                             </p>
                                         </div>
                                     </div>
-                                </div>
+                                </button>
                             ))
                         ) : (
                             <p className="text-sm text-muted-foreground">No places stayed were added for this trip.</p>
@@ -137,13 +150,15 @@ export default function FullScreenReview({
                                                 />
                                             </div>
                                             <div className="flex flex-col gap-1.5">
-                                                <div className="flex items-start justify-between gap-2">
-                                                    <h3 className="text-base font-semibold text-foreground">
+                                                <div className="flex min-w-0 items-start justify-between gap-2">
+                                                    <h3 className="min-w-0 flex-1 text-base font-semibold text-foreground break-words">
                                                         {activity.title}
                                                     </h3>
-                                                    <span className="flex flex-shrink-0 items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs text-muted-foreground">
-                                                        <MapPin className="h-3 w-3" />
-                                                        {activity.lat.toFixed(2)}, {activity.lng.toFixed(2)}
+                                                    <span className="inline-flex max-w-[65%] items-start gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs text-muted-foreground break-words whitespace-normal">
+                                                        <MapPin className="mt-0.5 h-3 w-3 flex-shrink-0" />
+                                                        <span className="min-w-0 break-words whitespace-normal">
+                                                            {activity.address}
+                                                        </span>
                                                     </span>
                                                 </div>
                                                 <p className="text-sm leading-relaxed text-foreground/70">

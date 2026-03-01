@@ -62,9 +62,9 @@ export default function PlansSidebarPanel({
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-foreground">{entry.activity.title}</p>
                     <p className="truncate text-xs text-muted-foreground">{entry.tripTitle}</p>
-                    <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
+                    <p className="mt-0.5 flex items-start gap-1 text-xs text-muted-foreground break-words whitespace-normal">
                       <MapPin className="h-3 w-3" />
-                      {entry.activity.lat.toFixed(2)}, {entry.activity.lng.toFixed(2)}
+                      <span className="min-w-0">{entry.activity.address}</span>
                     </p>
                   </div>
                 </button>
