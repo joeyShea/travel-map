@@ -73,19 +73,9 @@ export default function FullScreenReview({
                         </h2>
                         {review.lodgings.length > 0 ? (
                             review.lodgings.map((lodging) => (
-                                <button
-                                    type="button"
+                                <div
                                     key={lodging.id}
-                                    onClick={() => {
-                                        onSelectActivity(selectedActivity?.id === lodging.id ? null : lodging);
-                                        onSelectActivity(null);
-                                    }}
-                                    className={cn(
-                                        "w-full rounded-xl border p-3 text-left transition-colors",
-                                        selectedActivity?.id === lodging.id
-                                            ? "border-primary bg-primary/8 shadow-sm shadow-primary/10"
-                                            : "border-border bg-secondary/30 hover:bg-secondary/50",
-                                    )}
+                                    className="w-full rounded-xl border border-border bg-secondary/30 p-3"
                                 >
                                     <div className="grid gap-3 sm:grid-cols-[8rem,1fr]">
                                         <div className="relative h-28 w-full overflow-hidden rounded-lg sm:h-24">
@@ -104,7 +94,7 @@ export default function FullScreenReview({
                                             </p>
                                         </div>
                                     </div>
-                                </button>
+                                </div>
                             ))
                         ) : (
                             <p className="text-sm text-muted-foreground">No places stayed were added for this trip.</p>
