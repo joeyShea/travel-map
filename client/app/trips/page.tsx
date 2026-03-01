@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ImagePlus, MapPin, Plus, Sparkles, Trash2 } from "lucide-react";
 
@@ -82,6 +82,14 @@ function hasStopContent(stop: StopDraft): boolean {
 }
 
 export default function TripsPage() {
+  return (
+    <Suspense fallback={<main className="h-screen bg-[linear-gradient(180deg,#f7efe2_0%,#f4f4ef_55%,#eef3f6_100%)]" />}>
+      <TripsPageContent />
+    </Suspense>
+  );
+}
+
+function TripsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const returnTo = searchParams.get("returnTo") || "/";
@@ -282,9 +290,13 @@ export default function TripsPage() {
           })),
       });
 
-      const dest = new URL(returnTo, window.location.origin);
-      dest.searchParams.set("selectTrip", String(newTrip.trip_id));
-      router.push(dest.pathname + dest.search);
+      const safeReturnTo = returnTo.startsWith("/") ? returnTo : "/";
+      const [pathnamePart, queryPart] = safeReturnTo.split("?");
+      const destinationPath = pathnamePart || "/";
+      const destinationParams = new URLSearchParams(queryPart || "");
+      destinationParams.set("selectTrip", String(newTrip.trip_id));
+      const destinationQuery = destinationParams.toString();
+      router.push(destinationQuery ? `${destinationPath}?${destinationQuery}` : destinationPath);
       return;
     } catch (createError) {
       if (createError instanceof ApiError) {
