@@ -14,8 +14,8 @@ import StudentAddMenu from "@/components/student-add-menu";
 import UserProfileModal, { type UserProfile } from "@/components/user-profile-modal";
 import { deleteTrip, getTrip, getTrips, getUserProfile } from "@/lib/api-client";
 import type { UserProfileResponse } from "@/lib/api-types";
-import type { MapActivity, MapLodging, MapTrip, ModalProfile, SavedActivityEntry } from "@/lib/trip-models";
-import { buildSavedActivityKey, toMapTrip, toModalProfile } from "@/lib/trip-models";
+import type { MapActivity, MapLodging, MapTrip, ModalProfile, SavedActivityEntry, SavedLodgingEntry } from "@/lib/trip-models";
+import { buildSavedActivityKey, buildSavedLodgingKey, toMapTrip, toModalProfile } from "@/lib/trip-models";
 
 const MapView = dynamic(() => import("@/components/map-view"), {
     ssr: false,
@@ -75,6 +75,7 @@ export default function TravelMap() {
     const [searchPanelOpen, setSearchPanelOpen] = useState(false);
     const [plansPanelOpen, setPlansPanelOpen] = useState(false);
     const [savedActivityKeys, setSavedActivityKeys] = useState<string[]>([]);
+    const [savedLodgingKeys, setSavedLodgingKeys] = useState<string[]>([]);
 
     const [isLoadingTrips, setIsLoadingTrips] = useState(true);
     const [isLoadingTripById, setIsLoadingTripById] = useState(false);
@@ -100,6 +101,7 @@ export default function TravelMap() {
     }, []);
 
     const savedActivityKeySet = useMemo(() => new Set(savedActivityKeys), [savedActivityKeys]);
+    const savedLodgingKeySet = useMemo(() => new Set(savedLodgingKeys), [savedLodgingKeys]);
 
     const savedActivities = useMemo<SavedActivityEntry[]>(() => {
         const keySet = new Set(savedActivityKeys);
@@ -117,10 +119,34 @@ export default function TravelMap() {
         );
     }, [trips, savedActivityKeys]);
 
+    const savedLodgings = useMemo<SavedLodgingEntry[]>(() => {
+        const keySet = new Set(savedLodgingKeys);
+
+        return trips.flatMap((trip) =>
+            trip.lodgings
+                .filter((lodging) => keySet.has(buildSavedLodgingKey(trip.id, lodging.id)))
+                .map((lodging) => ({
+                    key: buildSavedLodgingKey(trip.id, lodging.id),
+                    tripId: trip.id,
+                    tripTitle: trip.title,
+                    tripThumbnail: trip.thumbnail,
+                    lodging,
+                })),
+        );
+    }, [trips, savedLodgingKeys]);
+
     const handleToggleSavedActivity = useCallback((tripId: number, activity: MapActivity) => {
         const key = buildSavedActivityKey(tripId, activity.id);
 
         setSavedActivityKeys((current) =>
+            current.includes(key) ? current.filter((item) => item !== key) : [key, ...current],
+        );
+    }, []);
+
+    const handleToggleSavedLodging = useCallback((tripId: number, lodging: MapLodging) => {
+        const key = buildSavedLodgingKey(tripId, lodging.id);
+
+        setSavedLodgingKeys((current) =>
             current.includes(key) ? current.filter((item) => item !== key) : [key, ...current],
         );
     }, []);
@@ -213,6 +239,25 @@ export default function TravelMap() {
         },
         [tripLookup, upsertTrip],
     );
+
+    // Keep a stable ref so the mount effect below can call openTripById
+    // without listing it as a dependency (avoids re-running on every render).
+    const openTripByIdRef = useRef(openTripById);
+    useEffect(() => {
+        openTripByIdRef.current = openTripById;
+    }, [openTripById]);
+
+    // On mount, check for a ?selectTrip=<id> param injected by the trip
+    // creation page after a new trip is posted.
+    useEffect(() => {
+        const param = new URLSearchParams(window.location.search).get("selectTrip");
+        if (!param) return;
+        const tripId = Number(param);
+        if (!Number.isFinite(tripId) || tripId <= 0) return;
+        window.history.replaceState(null, "", window.location.pathname);
+        void openTripByIdRef.current(tripId);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const handleViewFull = useCallback((trip: MapTrip) => {
         setFullScreenTrip(trip);
@@ -411,17 +456,15 @@ export default function TravelMap() {
 
     const handleSearchChange = useCallback((value: string) => {
         setSearchQuery(value);
+    }, []);
 
-        if (value.trim()) {
-            setSearchPanelOpen(true);
-            setPlansPanelOpen(false);
-            setSelectedTrip(null);
-            setFullScreenTrip(null);
-            setSelectedActivity(null);
-            setSelectedLodging(null);
-        } else {
-            setSearchPanelOpen(false);
-        }
+    const handleSearchFocus = useCallback(() => {
+        setSearchPanelOpen(true);
+        setPlansPanelOpen(false);
+        setSelectedTrip(null);
+        setFullScreenTrip(null);
+        setSelectedActivity(null);
+        setSelectedLodging(null);
     }, []);
 
     const handleTogglePlansPanel = useCallback(() => {
@@ -445,11 +488,10 @@ export default function TravelMap() {
     const showFullScreen = !!fullScreenTrip;
     const showSearchPanel = searchPanelOpen && !showSidebar && !showFullScreen;
     const showPlansPanel = plansPanelOpen && !showSidebar && !showFullScreen && !showSearchPanel;
-    const showTopLeftControls = showSearchPanel || showPlansPanel || (!showSidebar && !showFullScreen);
+    const showTopLeftControls = !showSidebar && !showFullScreen && !showSearchPanel && !showPlansPanel;
     const showAnyLeftSidebar = showSidebar || showFullScreen || showSearchPanel || showPlansPanel;
 
-    const topLeftControlsWidthClass =
-        showSearchPanel || showPlansPanel ? "w-[min(390px,calc(100vw-7.5rem))]" : "w-[min(440px,calc(100vw-2rem))]";
+    const topLeftControlsWidthClass = "w-[min(440px,calc(100vw-2rem))]";
 
     return (
         <div className="relative h-screen w-screen overflow-hidden">
@@ -461,6 +503,7 @@ export default function TravelMap() {
                             <input
                                 value={searchQuery}
                                 onChange={(e) => handleSearchChange(e.target.value)}
+                                onFocus={handleSearchFocus}
                                 placeholder="Search trips, places, or keywords"
                                 className="h-full w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
                                 aria-label="Search trips"
@@ -519,7 +562,9 @@ export default function TravelMap() {
                                 void openProfile(profileUserId, "left");
                             }}
                             savedActivityKeys={savedActivityKeySet}
+                            savedLodgingKeys={savedLodgingKeySet}
                             onToggleSavedActivity={handleToggleSavedActivity}
+                            onToggleSavedLodging={handleToggleSavedLodging}
                             selectedActivityId={selectedActivity?.id ?? null}
                             selectedLodgingId={selectedLodging?.id ?? null}
                             onSelectActivity={handleSelectActivity}
@@ -547,21 +592,31 @@ export default function TravelMap() {
                                 void openProfile(profileUserId, "left");
                             }}
                             savedActivityKeys={savedActivityKeySet}
+                            savedLodgingKeys={savedLodgingKeySet}
                             onToggleSavedActivity={handleToggleSavedActivity}
+                            onToggleSavedLodging={handleToggleSavedLodging}
                         />
                     )}
                     {showSearchPanel && (
                         <SearchSidebarPanel
                             query={searchQuery}
+                            trips={trips}
+                            onQueryChange={handleSearchChange}
                             onClose={() => {
                                 setSearchPanelOpen(false);
                                 setSearchQuery("");
+                            }}
+                            onSelectTrip={(tripId) => {
+                                setSearchPanelOpen(false);
+                                setSearchQuery("");
+                                void openTripById(tripId);
                             }}
                         />
                     )}
                     {showPlansPanel && (
                         <PlansSidebarPanel
                             savedActivities={savedActivities}
+                            savedLodgings={savedLodgings}
                             onClose={() => {
                                 setPlansPanelOpen(false);
                             }}
@@ -572,6 +627,10 @@ export default function TravelMap() {
                             onToggleSavedActivity={(tripId, activityId) => {
                                 const key = buildSavedActivityKey(tripId, activityId);
                                 setSavedActivityKeys((current) => current.filter((currentKey) => currentKey !== key));
+                            }}
+                            onToggleSavedLodging={(tripId: number, lodgingId: number) => {
+                                const key = buildSavedLodgingKey(tripId, lodgingId);
+                                setSavedLodgingKeys((current) => current.filter((currentKey) => currentKey !== key));
                             }}
                         />
                     )}

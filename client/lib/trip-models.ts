@@ -28,6 +28,14 @@ export interface SavedActivityEntry {
   activity: MapActivity;
 }
 
+export interface SavedLodgingEntry {
+  key: string;
+  tripId: number;
+  tripTitle: string;
+  tripThumbnail: string;
+  lodging: MapLodging;
+}
+
 export interface MapTrip {
   id: number;
   title: string;
@@ -42,6 +50,8 @@ export interface MapTrip {
   ownerVerified: boolean;
   ownerCollege: string;
   ownerBio: string;
+  tags: string[];
+  cost: number | null;
   lodgings: MapLodging[];
   activities: MapActivity[];
 }
@@ -86,6 +96,10 @@ function toDisplayDate(dateValue: string | null | undefined): string {
 
 export function buildSavedActivityKey(tripId: number, activityId: number): string {
   return `${tripId}:${activityId}`;
+}
+
+export function buildSavedLodgingKey(tripId: number, lodgingId: number): string {
+  return `lodging:${tripId}:${lodgingId}`;
 }
 
 function firstSentence(value: string): string {
@@ -161,6 +175,8 @@ export function toMapTrip(trip: Trip): MapTrip | null {
     ownerVerified: trip.owner.verified,
     ownerCollege: trip.owner.college || "—",
     ownerBio: trip.owner.bio || "Traveler sharing experiences from the road.",
+    tags: trip.tags ?? [],
+    cost: trip.cost ?? null,
     lodgings,
     activities,
   };

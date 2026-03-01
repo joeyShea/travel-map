@@ -2,7 +2,13 @@
 
 import Image from "next/image";
 import { X, ArrowRight, MapPin, Calendar, Notebook, ChevronLeft, ChevronRight, User, BedDouble } from "lucide-react";
-import { buildSavedActivityKey, type MapActivity, type MapLodging, type MapTrip } from "@/lib/trip-models";
+import {
+    buildSavedActivityKey,
+    buildSavedLodgingKey,
+    type MapActivity,
+    type MapLodging,
+    type MapTrip,
+} from "@/lib/trip-models";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 
@@ -12,7 +18,9 @@ interface SidebarPanelProps {
     onViewFull: (trip: MapTrip) => void;
     onOpenAuthorProfile: (userId: number) => void;
     savedActivityKeys: ReadonlySet<string>;
+    savedLodgingKeys: ReadonlySet<string>;
     onToggleSavedActivity: (tripId: number, activity: MapActivity) => void;
+    onToggleSavedLodging: (tripId: number, lodging: MapLodging) => void;
     selectedActivityId: number | null;
     selectedLodgingId: number | null;
     onSelectActivity: (activity: MapActivity | null) => void;
@@ -52,7 +60,9 @@ export default function SidebarPanel({
     onViewFull,
     onOpenAuthorProfile,
     savedActivityKeys,
+    savedLodgingKeys,
     onToggleSavedActivity,
+    onToggleSavedLodging,
     selectedActivityId,
     selectedLodgingId,
     onSelectActivity,
@@ -64,8 +74,27 @@ export default function SidebarPanel({
     canShowPreviousTripAtLocation,
     canShowNextTripAtLocation,
 }: SidebarPanelProps) {
+    const fabActivity = review.activities.find((a) => a.id === selectedActivityId) ?? null;
+    const fabLodging = !fabActivity ? (review.lodgings.find((l) => l.id === selectedLodgingId) ?? null) : null;
+
+    const fabSaved = fabActivity
+        ? savedActivityKeys.has(buildSavedActivityKey(review.id, fabActivity.id))
+        : fabLodging
+          ? savedLodgingKeys.has(buildSavedLodgingKey(review.id, fabLodging.id))
+          : false;
+
+    const fabVisible = fabActivity !== null || fabLodging !== null;
+
+    function handleFabClick() {
+        if (fabActivity) {
+            onToggleSavedActivity(review.id, fabActivity);
+        } else if (fabLodging) {
+            onToggleSavedLodging(review.id, fabLodging);
+        }
+    }
+
     return (
-        <div className="flex h-full w-full flex-col bg-card border-r border-border">
+        <div className="relative flex h-full w-full flex-col bg-card border-r border-border">
             {/* Header image */}
             <div className="relative h-56 flex-shrink-0">
                 <Image src={review.thumbnail} alt={review.title} fill className="object-cover" />
@@ -109,7 +138,7 @@ export default function SidebarPanel({
 
             {/* Content */}
             <ScrollArea className="flex-1 min-h-0">
-                <div className="flex flex-col gap-5 p-5">
+                <div className="flex flex-col gap-5 p-5 pb-20">
                     {/* Meta */}
                     <div className="flex items-center gap-4 text-sm text-muted-foreground">
                         <button
@@ -169,62 +198,34 @@ export default function SidebarPanel({
                             Activities
                         </h3>
                         {review.activities.length > 0 ? (
-                            review.activities.map((activity) => {
-                                const isSaved = savedActivityKeys.has(buildSavedActivityKey(review.id, activity.id));
-
-                                return (
-                                    <div
-                                        key={activity.id}
-                                        className="flex items-center gap-3 rounded-lg bg-secondary/60 p-3 transition-colors hover:bg-secondary"
-                                    >
-                                        <button
-                                            type="button"
-                                            onClick={() =>
-                                                onSelectActivity(selectedActivityId === activity.id ? null : activity)
-                                            }
-                                            className={cn(
-                                                "flex min-w-0 flex-1 items-center gap-3 rounded-md px-1 py-0.5 text-left",
-                                                selectedActivityId === activity.id
-                                                    ? "bg-primary/10 ring-1 ring-primary/30"
-                                                    : "",
-                                            )}
-                                        >
-                                            <div className="relative h-12 w-12 flex-shrink-0 overflow-hidden rounded-md">
-                                                <Image
-                                                    src={activity.image}
-                                                    alt={activity.title}
-                                                    fill
-                                                    className="object-cover"
-                                                />
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <p className="text-sm font-medium text-foreground break-words">
-                                                    {activity.title}
-                                                </p>
-                                                <p className="flex items-start gap-1 text-xs text-muted-foreground break-words whitespace-normal">
-                                                    <MapPin className="h-3 w-3" />
-                                                    <span className="min-w-0">{activity.address}</span>
-                                                </p>
-                                            </div>
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => onToggleSavedActivity(review.id, activity)}
-                                            className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border transition-colors ${
-                                                isSaved
-                                                    ? "border-primary/40 bg-primary/10 text-primary hover:bg-primary/20"
-                                                    : "border-border bg-background/80 text-muted-foreground hover:bg-secondary"
-                                            }`}
-                                            aria-label={
-                                                isSaved ? "Remove activity from plans" : "Save activity to plans"
-                                            }
-                                            title={isSaved ? "Remove from plans" : "Save to plans"}
-                                        >
-                                            <Notebook className="h-4 w-4" />
-                                        </button>
+                            review.activities.map((activity) => (
+                                <button
+                                    key={activity.id}
+                                    type="button"
+                                    onClick={() =>
+                                        onSelectActivity(selectedActivityId === activity.id ? null : activity)
+                                    }
+                                    className={cn(
+                                        "flex w-full items-center gap-3 rounded-lg p-3 text-left transition-colors",
+                                        selectedActivityId === activity.id
+                                            ? "bg-primary/10 ring-1 ring-primary/30"
+                                            : "bg-secondary/60 hover:bg-secondary",
+                                    )}
+                                >
+                                    <div className="relative h-12 w-12 flex-shrink-0 overflow-hidden rounded-md">
+                                        <Image src={activity.image} alt={activity.title} fill className="object-cover" />
                                     </div>
-                                );
-                            })
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-medium text-foreground break-words">
+                                            {activity.title}
+                                        </p>
+                                        <p className="flex items-start gap-1 text-xs text-muted-foreground break-words whitespace-normal">
+                                            <MapPin className="h-3 w-3 flex-shrink-0 mt-0.5" />
+                                            <span className="min-w-0">{activity.address}</span>
+                                        </p>
+                                    </div>
+                                </button>
+                            ))
                         ) : (
                             <p className="text-sm text-muted-foreground">No activities were added for this trip.</p>
                         )}
@@ -240,6 +241,23 @@ export default function SidebarPanel({
                     </button>
                 </div>
             </ScrollArea>
+
+            {/* Floating save FAB — appears when an activity or lodging is selected */}
+            {fabVisible && (
+                <button
+                    type="button"
+                    onClick={handleFabClick}
+                    className={cn(
+                        "absolute bottom-5 right-5 flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium shadow-lg transition-colors",
+                        fabSaved
+                            ? "bg-primary text-primary-foreground hover:opacity-90"
+                            : "border border-border bg-card text-foreground hover:bg-secondary",
+                    )}
+                >
+                    <Notebook className="h-4 w-4" />
+                    {fabSaved ? "Saved" : "Save to Plans"}
+                </button>
+            )}
         </div>
     );
 }

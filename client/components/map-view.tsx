@@ -348,7 +348,10 @@ export default function MapView({
             return;
         }
 
+        const tripLocationKey = getLocationKey(focusTrip.lat, focusTrip.lng);
+
         for (const activity of focusTrip.activities) {
+            if (getLocationKey(activity.lat, activity.lng) === tripLocationKey) continue;
             const marker = L.marker([activity.lat, activity.lng], {
                 icon: createActivityIcon(activity, selectedActivity?.id === activity.id),
             })
@@ -362,6 +365,7 @@ export default function MapView({
         }
 
         for (const lodging of focusTrip.lodgings) {
+            if (getLocationKey(lodging.lat, lodging.lng) === tripLocationKey) continue;
             const marker = L.marker([lodging.lat, lodging.lng], {
                 icon: createLodgingIcon(lodging, selectedLodging?.id === lodging.id),
             })

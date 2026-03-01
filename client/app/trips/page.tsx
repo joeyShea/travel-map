@@ -235,7 +235,7 @@ export default function TripsPage() {
     setIsSavingTrip(true);
 
     try {
-      await createTrip({
+      const newTrip = await createTrip({
         title: title.trim(),
         thumbnail_url: clean(coverImage),
         description: clean(description),
@@ -271,7 +271,9 @@ export default function TripsPage() {
           })),
       });
 
-      router.push(returnTo);
+      const dest = new URL(returnTo, window.location.origin);
+      dest.searchParams.set("selectTrip", String(newTrip.trip_id));
+      router.push(dest.pathname + dest.search);
       return;
     } catch (createError) {
       if (createError instanceof ApiError) {
