@@ -9,15 +9,15 @@ import type { SessionUser, UserProfileResponse } from "@/lib/api-types";
 type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 
 interface AuthContextValue {
-  status: AuthStatus;
-  user: SessionUser | null;
-  userId: number | null;
-  isAuthenticated: boolean;
-  isStudent: boolean;
-  myProfile: UserProfileResponse | null;
-  refreshSession: () => Promise<SessionUser | null>;
-  refreshMyProfile: (userIdOverride?: number) => Promise<UserProfileResponse | null>;
-  signOut: () => Promise<void>;
+    status: AuthStatus;
+    user: SessionUser | null;
+    userId: number | null;
+    isAuthenticated: boolean;
+    isStudent: boolean;
+    myProfile: UserProfileResponse | null;
+    refreshSession: () => Promise<SessionUser | null>;
+    refreshMyProfile: (userIdOverride?: number) => Promise<UserProfileResponse | null>;
+    signOut: () => Promise<void>;
 }
 
 const SESSION_CACHE_KEY = "travel-map.session-user.v1";
@@ -28,214 +28,209 @@ const STUDENT_ONLY_ROUTES = new Set(["/trips"]);
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 function readCachedJson<T>(key: string): T | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  try {
-    const raw = window.localStorage.getItem(key);
-    if (!raw) {
-      return null;
+    if (typeof window === "undefined") {
+        return null;
     }
-    return JSON.parse(raw) as T;
-  } catch {
-    return null;
-  }
+
+    try {
+        const raw = window.sessionStorage.getItem(key);
+        if (!raw) {
+            return null;
+        }
+        return JSON.parse(raw) as T;
+    } catch {
+        return null;
+    }
 }
 
 function writeCachedJson<T>(key: string, value: T | null) {
-  if (typeof window === "undefined") {
-    return;
-  }
+    if (typeof window === "undefined") {
+        return;
+    }
 
-  if (value === null) {
-    window.localStorage.removeItem(key);
-    return;
-  }
+    if (value === null) {
+        window.sessionStorage.removeItem(key);
+        return;
+    }
 
-  window.localStorage.setItem(key, JSON.stringify(value));
+    window.sessionStorage.setItem(key, JSON.stringify(value));
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const [status, setStatus] = useState<AuthStatus>("loading");
-  const [user, setUser] = useState<SessionUser | null>(null);
-  const [myProfile, setMyProfile] = useState<UserProfileResponse | null>(null);
-  const [isHydratedFromCache, setIsHydratedFromCache] = useState(false);
+    const router = useRouter();
+    const pathname = usePathname();
+    const [status, setStatus] = useState<AuthStatus>("loading");
+    const [user, setUser] = useState<SessionUser | null>(null);
+    const [myProfile, setMyProfile] = useState<UserProfileResponse | null>(null);
+    const [isHydratedFromCache, setIsHydratedFromCache] = useState(false);
 
-  useEffect(() => {
-    const cachedUser = readCachedJson<SessionUser>(SESSION_CACHE_KEY);
-    const cachedProfile = readCachedJson<UserProfileResponse>(PROFILE_CACHE_KEY);
+    useEffect(() => {
+        const cachedUser = readCachedJson<SessionUser>(SESSION_CACHE_KEY);
+        const cachedProfile = readCachedJson<UserProfileResponse>(PROFILE_CACHE_KEY);
 
-    if (cachedUser && typeof cachedUser.user_id === "number") {
-      setUser(cachedUser);
-      setStatus("authenticated");
-    } else {
-      setStatus("loading");
-    }
-
-    if (
-      cachedProfile &&
-      cachedUser &&
-      cachedProfile.user &&
-      cachedProfile.user.user_id === cachedUser.user_id
-    ) {
-      setMyProfile(cachedProfile);
-    }
-
-    setIsHydratedFromCache(true);
-  }, []);
-
-  const refreshSession = useCallback(async () => {
-    try {
-      const response = await getSession();
-      if (response.authenticated && response.user) {
-        setUser(response.user);
-        setStatus("authenticated");
-        writeCachedJson(SESSION_CACHE_KEY, response.user);
-        return response.user;
-      }
-
-      setUser(null);
-      setStatus("unauthenticated");
-      setMyProfile(null);
-      writeCachedJson(SESSION_CACHE_KEY, null);
-      writeCachedJson(PROFILE_CACHE_KEY, null);
-      return null;
-    } catch (error) {
-      if (error instanceof ApiError && error.status === 401) {
-        setUser(null);
-        setStatus("unauthenticated");
-        setMyProfile(null);
-        writeCachedJson(SESSION_CACHE_KEY, null);
-        writeCachedJson(PROFILE_CACHE_KEY, null);
-        return null;
-      }
-
-      setUser(null);
-      setStatus("unauthenticated");
-      setMyProfile(null);
-      writeCachedJson(SESSION_CACHE_KEY, null);
-      writeCachedJson(PROFILE_CACHE_KEY, null);
-      return null;
-    }
-  }, []);
-
-  const refreshMyProfile = useCallback(
-    async (userIdOverride?: number) => {
-      const targetUserId = userIdOverride ?? user?.user_id;
-      if (!targetUserId) {
-        setMyProfile(null);
-        writeCachedJson(PROFILE_CACHE_KEY, null);
-        return null;
-      }
-
-      try {
-        const profile = await getUserProfile(targetUserId);
-        if (profile.user.user_id !== targetUserId) {
-          return null;
+        if (cachedUser && typeof cachedUser.user_id === "number") {
+            setUser(cachedUser);
+            setStatus("authenticated");
+        } else {
+            setStatus("loading");
         }
 
-        setMyProfile(profile);
-        writeCachedJson(PROFILE_CACHE_KEY, profile);
-        return profile;
-      } catch {
-        return myProfile;
-      }
-    },
-    [myProfile, user?.user_id],
-  );
+        if (cachedProfile && cachedUser && cachedProfile.user && cachedProfile.user.user_id === cachedUser.user_id) {
+            setMyProfile(cachedProfile);
+        }
 
-  const signOut = useCallback(async () => {
-    try {
-      await logoutSession();
-    } catch {
-      // Continue clearing client auth state even if network logout fails.
-    }
+        setIsHydratedFromCache(true);
+    }, []);
 
-    setUser(null);
-    setMyProfile(null);
-    setStatus("unauthenticated");
-    writeCachedJson(SESSION_CACHE_KEY, null);
-    writeCachedJson(PROFILE_CACHE_KEY, null);
+    const refreshSession = useCallback(async () => {
+        try {
+            const response = await getSession();
+            if (response.authenticated && response.user) {
+                setUser(response.user);
+                setStatus("authenticated");
+                writeCachedJson(SESSION_CACHE_KEY, response.user);
+                return response.user;
+            }
 
-    if (typeof window !== "undefined") {
-      window.location.replace("/signup");
-    }
-  }, []);
+            setUser(null);
+            setStatus("unauthenticated");
+            setMyProfile(null);
+            writeCachedJson(SESSION_CACHE_KEY, null);
+            writeCachedJson(PROFILE_CACHE_KEY, null);
+            return null;
+        } catch (error) {
+            if (error instanceof ApiError && error.status === 401) {
+                setUser(null);
+                setStatus("unauthenticated");
+                setMyProfile(null);
+                writeCachedJson(SESSION_CACHE_KEY, null);
+                writeCachedJson(PROFILE_CACHE_KEY, null);
+                return null;
+            }
 
-  useEffect(() => {
-    if (!isHydratedFromCache) {
-      return;
-    }
+            setUser(null);
+            setStatus("unauthenticated");
+            setMyProfile(null);
+            writeCachedJson(SESSION_CACHE_KEY, null);
+            writeCachedJson(PROFILE_CACHE_KEY, null);
+            return null;
+        }
+    }, []);
 
-    void refreshSession();
-  }, [isHydratedFromCache, refreshSession]);
+    const refreshMyProfile = useCallback(
+        async (userIdOverride?: number) => {
+            const targetUserId = userIdOverride ?? user?.user_id;
+            if (!targetUserId) {
+                setMyProfile(null);
+                writeCachedJson(PROFILE_CACHE_KEY, null);
+                return null;
+            }
 
-  useEffect(() => {
-    if (!isHydratedFromCache) {
-      return;
-    }
+            try {
+                const profile = await getUserProfile(targetUserId);
+                if (profile.user.user_id !== targetUserId) {
+                    return null;
+                }
 
-    const isPublicRoute = PUBLIC_ROUTES.has(pathname);
-    const isStudentOnlyRoute = STUDENT_ONLY_ROUTES.has(pathname);
+                setMyProfile(profile);
+                writeCachedJson(PROFILE_CACHE_KEY, profile);
+                return profile;
+            } catch {
+                return myProfile;
+            }
+        },
+        [myProfile, user?.user_id],
+    );
 
-    if (status === "loading") {
-      return;
-    }
+    const signOut = useCallback(async () => {
+        try {
+            await logoutSession();
+        } catch {
+            // Continue clearing client auth state even if network logout fails.
+        }
 
-    if (status === "unauthenticated" && !isPublicRoute) {
-      router.replace("/signup");
-      return;
-    }
+        setUser(null);
+        setMyProfile(null);
+        setStatus("unauthenticated");
+        writeCachedJson(SESSION_CACHE_KEY, null);
+        writeCachedJson(PROFILE_CACHE_KEY, null);
 
-    if (status === "authenticated" && isPublicRoute) {
-      router.replace("/");
-      return;
-    }
+        if (typeof window !== "undefined") {
+            window.location.replace("/signup");
+        }
+    }, []);
 
-    if (status === "authenticated" && isStudentOnlyRoute && !Boolean(user?.verified)) {
-      router.replace("/");
-    }
-  }, [isHydratedFromCache, pathname, router, status, user?.verified]);
+    useEffect(() => {
+        if (!isHydratedFromCache) {
+            return;
+        }
 
-  useEffect(() => {
-    if (status !== "authenticated" || !user?.user_id) {
-      setMyProfile(null);
-      writeCachedJson(PROFILE_CACHE_KEY, null);
-      return;
-    }
+        void refreshSession();
+    }, [isHydratedFromCache, refreshSession]);
 
-    if (myProfile?.user?.user_id === user.user_id) {
-      return;
-    }
+    useEffect(() => {
+        if (!isHydratedFromCache) {
+            return;
+        }
 
-    void refreshMyProfile(user.user_id);
-  }, [myProfile?.user?.user_id, refreshMyProfile, status, user?.user_id]);
+        const isPublicRoute = PUBLIC_ROUTES.has(pathname);
+        const isStudentOnlyRoute = STUDENT_ONLY_ROUTES.has(pathname);
 
-  const value = useMemo<AuthContextValue>(() => {
-    const userId = user?.user_id ?? null;
-    return {
-      status,
-      user,
-      userId,
-      isAuthenticated: status === "authenticated" && userId !== null,
-      isStudent: Boolean(user?.verified),
-      myProfile,
-      refreshSession,
-      refreshMyProfile,
-      signOut,
-    };
-  }, [status, user, myProfile, refreshSession, refreshMyProfile, signOut]);
+        if (status === "loading") {
+            return;
+        }
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+        if (status === "unauthenticated" && !isPublicRoute) {
+            router.replace("/signup");
+            return;
+        }
+
+        if (status === "authenticated" && isPublicRoute) {
+            router.replace("/");
+            return;
+        }
+
+        if (status === "authenticated" && isStudentOnlyRoute && !Boolean(user?.verified)) {
+            router.replace("/");
+        }
+    }, [isHydratedFromCache, pathname, router, status, user?.verified]);
+
+    useEffect(() => {
+        if (status !== "authenticated" || !user?.user_id) {
+            setMyProfile(null);
+            writeCachedJson(PROFILE_CACHE_KEY, null);
+            return;
+        }
+
+        if (myProfile?.user?.user_id === user.user_id) {
+            return;
+        }
+
+        void refreshMyProfile(user.user_id);
+    }, [myProfile?.user?.user_id, refreshMyProfile, status, user?.user_id]);
+
+    const value = useMemo<AuthContextValue>(() => {
+        const userId = user?.user_id ?? null;
+        return {
+            status,
+            user,
+            userId,
+            isAuthenticated: status === "authenticated" && userId !== null,
+            isStudent: Boolean(user?.verified),
+            myProfile,
+            refreshSession,
+            refreshMyProfile,
+            signOut,
+        };
+    }, [status, user, myProfile, refreshSession, refreshMyProfile, signOut]);
+
+    return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuth must be used inside AuthProvider");
-  }
-  return context;
+    const context = useContext(AuthContext);
+    if (!context) {
+        throw new Error("useAuth must be used inside AuthProvider");
+    }
+    return context;
 }

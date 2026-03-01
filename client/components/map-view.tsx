@@ -21,7 +21,7 @@ const MARKER_FALLBACK_IMAGE = "/images/nyc.jpg";
 const STORED_MAP_VIEW_KEY = "travel-map:view:v1";
 const SELECTED_REVIEW_ZOOM = 16;
 const DETAIL_ZOOM = 13;
-const INITIAL_USER_ZOOM = 10;
+const INITIAL_USER_ZOOM = 12;
 const FULL_SCREEN_MAX_ZOOM = 12;
 
 let hasAutoCenteredOnUser = false;
@@ -46,7 +46,7 @@ function readStoredMapView(): StoredMapView | null {
         return null;
     }
 
-    const raw = window.localStorage.getItem(STORED_MAP_VIEW_KEY);
+    const raw = window.sessionStorage.getItem(STORED_MAP_VIEW_KEY);
     if (!raw) {
         return null;
     }
@@ -76,7 +76,7 @@ function persistMapView(map: L.Map) {
         lng: center.lng,
         zoom: map.getZoom(),
     };
-    window.localStorage.setItem(STORED_MAP_VIEW_KEY, JSON.stringify(payload));
+    window.sessionStorage.setItem(STORED_MAP_VIEW_KEY, JSON.stringify(payload));
 }
 
 function getLocationKey(lat: number, lng: number): string {
