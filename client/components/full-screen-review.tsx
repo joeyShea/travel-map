@@ -19,8 +19,10 @@ interface FullScreenReviewProps {
 export default function FullScreenReview({
   review,
   selectedActivity,
+  selectedLodging,
   onBack,
   onSelectActivity,
+  onSelectLodging,
   onOpenAuthorProfile,
   savedActivityKeys,
   onToggleSavedActivity,
@@ -70,7 +72,17 @@ export default function FullScreenReview({
             </h2>
             {review.lodgings.length > 0 ? (
               review.lodgings.map((lodging) => (
-                <div key={lodging.id} className="rounded-xl border border-border bg-secondary/30 p-3">
+                <button
+                  type="button"
+                  key={lodging.id}
+                  onClick={() => onSelectLodging(selectedLodging?.id === lodging.id ? null : lodging)}
+                  className={cn(
+                    "w-full rounded-xl border p-3 text-left transition-colors",
+                    selectedLodging?.id === lodging.id
+                      ? "border-primary bg-primary/8 shadow-sm shadow-primary/10"
+                      : "border-border bg-secondary/30 hover:bg-secondary/50"
+                  )}
+                >
                   <div className="grid gap-3 sm:grid-cols-[8rem,1fr]">
                     <div className="relative h-28 w-full overflow-hidden rounded-lg sm:h-24">
                       <Image src={lodging.image} alt={lodging.name} fill className="object-cover" />
@@ -81,7 +93,7 @@ export default function FullScreenReview({
                       <p className="text-sm leading-relaxed text-foreground/70">{lodging.description}</p>
                     </div>
                   </div>
-                </div>
+                </button>
               ))
             ) : (
               <p className="text-sm text-muted-foreground">No places stayed were added for this trip.</p>

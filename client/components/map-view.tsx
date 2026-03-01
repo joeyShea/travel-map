@@ -26,6 +26,52 @@ function escapeHtml(value: string): string {
         .replaceAll("'", "&#39;");
 let hasAutoCenteredOnUser = false;
 
+interface StoredMapView {
+    lat: number;
+    lng: number;
+    zoom: number;
+}
+
+function readStoredMapView(): StoredMapView | null {
+    if (typeof window === "undefined") {
+        return null;
+    }
+
+    const raw = window.localStorage.getItem(STORED_MAP_VIEW_KEY);
+    if (!raw) {
+        return null;
+    }
+
+    try {
+        const parsed = JSON.parse(raw) as Partial<StoredMapView>;
+        const lat = Number(parsed.lat);
+        const lng = Number(parsed.lng);
+        const zoom = Number(parsed.zoom);
+
+        if (!Number.isFinite(lat) || !Number.isFinite(lng) || !Number.isFinite(zoom)) {
+            return null;
+        }
+
+        return { lat, lng, zoom };
+    } catch {
+        return null;
+    }
+}
+
+function persistMapView(map: L.Map) {
+    if (typeof window === "undefined") {
+        return;
+    }
+
+    const center = map.getCenter();
+    const payload: StoredMapView = {
+        lat: center.lat,
+        lng: center.lng,
+        zoom: map.getZoom(),
+    };
+    window.localStorage.setItem(STORED_MAP_VIEW_KEY, JSON.stringify(payload));
+}
+
 function getLocationKey(lat: number, lng: number): string {
     return `${lat.toFixed(6)}:${lng.toFixed(6)}`;
 }
@@ -55,6 +101,7 @@ export default function MapView({
     selectedTrip,
     fullScreenTrip,
     selectedActivity,
+    selectedLodging,
     onSelectTripById,
     onSelectActivity,
 }: MapViewProps) {
@@ -63,9 +110,11 @@ export default function MapView({
     const markersRef = useRef<L.Marker[]>([]);
     const activityMarkersRef = useRef<L.Marker[]>([]);
     const lastFocusedLocationKeyRef = useRef<string | null>(null);
+    const lastFocusedDetailKeyRef = useRef<string | null>(null);
     const selectedTripRef = useRef<MapTrip | null>(null);
     const fullScreenTripRef = useRef<MapTrip | null>(null);
     const selectedActivityRef = useRef<MapActivity | null>(null);
+    const selectedLodgingRef = useRef<MapLodging | null>(null);
 
     useEffect(() => {
         selectedTripRef.current = selectedTrip;
@@ -79,16 +128,24 @@ export default function MapView({
         selectedActivityRef.current = selectedActivity;
     }, [selectedActivity]);
 
+    useEffect(() => {
+        selectedLodgingRef.current = selectedLodging;
+    }, [selectedLodging]);
+
     // Initialize map
     useEffect(() => {
         if (!mapContainerRef.current || mapRef.current) return;
 
         // Extended bounds to cover continental US + Alaska + Hawaii, with padding
         const usBounds = L.latLngBounds([13, -180], [76, -60]);
+        const storedMapView = readStoredMapView();
+        if (storedMapView) {
+            hasAutoCenteredOnUser = true;
+        }
 
         const map = L.map(mapContainerRef.current, {
-            center: [39.5, -98.35],
-            zoom: 5,
+            center: storedMapView ? [storedMapView.lat, storedMapView.lng] : [39.5, -98.35],
+            zoom: storedMapView ? storedMapView.zoom : 5,
             minZoom: 4,
             maxBounds: usBounds,
             maxBoundsViscosity: 1.0,
@@ -105,6 +162,7 @@ export default function MapView({
         L.control.zoom({ position: "bottomright" }).addTo(map);
 
         mapRef.current = map;
+        map.on("moveend", () => persistMapView(map));
 
         let cancelled = false;
 
@@ -117,7 +175,8 @@ export default function MapView({
                     if (
                         selectedTripRef.current !== null ||
                         fullScreenTripRef.current !== null ||
-                        selectedActivityRef.current !== null
+                        selectedActivityRef.current !== null ||
+                        selectedLodgingRef.current !== null
                     ) {
                         hasAutoCenteredOnUser = true;
                         return;
