@@ -11,12 +11,12 @@ export interface MapActivity {
 
 export interface MapLodging {
   id: number;
-  name: string;
+  title: string;
   description: string;
   image: string;
   address: string;
-  lat: number | null;
-  lng: number | null;
+  lat: number;
+  lng: number;
 }
 
 export interface SavedActivityEntry {
@@ -43,7 +43,6 @@ export interface MapTrip {
   ownerBio: string;
   lodgings: MapLodging[];
   activities: MapActivity[];
-  lodging: MapLodging[] | null;
 }
 
 export interface ProfileTripEntry {
@@ -124,8 +123,9 @@ function toLodging(lodging: Trip["lodgings"][number]): MapLodging | null {
 
   return {
     id: lodging.lodge_id,
-    name: lodging.title || "Untitled lodging",
+    title: lodging.title || "Untitled lodging",
     description: lodging.description || "No description yet.",
+    image: lodging.thumbnail_url || PLACEHOLDER_IMAGE,
     address: lodging.address || "Location not provided",
     lat: lodging.latitude,
     lng: lodging.longitude,
@@ -138,13 +138,12 @@ export function toMapTrip(trip: Trip): MapTrip | null {
   }
 
   const description = (trip.description || "").trim();
-  const lodgings = trip.lodgings.map(toLodging);
+  const lodgings = (trip.lodgings || [])
+    .map(toLodging)
+    .filter((item): item is MapLodging => item !== null);
   const activities = trip.activities
     .map(toActivity)
     .filter((activity): activity is MapActivity => activity !== null);
-  const lodging = (trip.lodgings || [])
-    .map(toLodging)
-    .filter((item): item is MapLodging => item !== null);
 
   return {
     id: trip.trip_id,
@@ -162,7 +161,6 @@ export function toMapTrip(trip: Trip): MapTrip | null {
     ownerBio: trip.owner.bio || "Traveler sharing experiences from the road.",
     lodgings,
     activities,
-    lodging: lodging.length > 0 ? lodging : null,
   };
 }
 

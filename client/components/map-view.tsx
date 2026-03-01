@@ -1,21 +1,32 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import type { MapActivity, MapTrip, MapLodging } from "@/lib/trip-models";
+
+import type { MapActivity, MapLodging, MapTrip } from "@/lib/trip-models";
 
 interface MapViewProps {
     trips: MapTrip[];
     selectedTrip: MapTrip | null;
     fullScreenTrip: MapTrip | null;
-    selectedActivity: MapActivity | MapLodging | null;
+    selectedActivity: MapActivity | null;
     onSelectTripById: (tripId: number | null) => void;
-    onSelectActivity: (activity: MapActivity | MapLodging | null) => void;
+    onSelectActivity: (activity: MapActivity | null) => void;
 }
 
-const SELECTED_REVIEW_ZOOM = 16;
 const MARKER_FALLBACK_IMAGE = "/images/nyc.jpg";
+const STORED_MAP_VIEW_KEY = "travel-map:view:v1";
+const SELECTED_REVIEW_ZOOM = 16;
+const DETAIL_ZOOM = 13;
+
+let hasAutoCenteredOnUser = false;
+
+interface StoredMapView {
+    lat: number;
+    lng: number;
+    zoom: number;
+}
 
 function escapeHtml(value: string): string {
     return value
@@ -24,12 +35,6 @@ function escapeHtml(value: string): string {
         .replaceAll(">", "&gt;")
         .replaceAll('"', "&quot;")
         .replaceAll("'", "&#39;");
-let hasAutoCenteredOnUser = false;
-
-interface StoredMapView {
-    lat: number;
-    lng: number;
-    zoom: number;
 }
 
 function readStoredMapView(): StoredMapView | null {
@@ -47,11 +52,9 @@ function readStoredMapView(): StoredMapView | null {
         const lat = Number(parsed.lat);
         const lng = Number(parsed.lng);
         const zoom = Number(parsed.zoom);
-
         if (!Number.isFinite(lat) || !Number.isFinite(lng) || !Number.isFinite(zoom)) {
             return null;
         }
-
         return { lat, lng, zoom };
     } catch {
         return null;
@@ -84,14 +87,13 @@ function getTripTimestamp(dateValue: string): number {
 function getMostRecentTripsByLocation(trips: MapTrip[]): MapTrip[] {
     const mostRecentByLocation = new Map<string, MapTrip>();
 
-    trips.forEach((trip) => {
+    for (const trip of trips) {
         const key = getLocationKey(trip.lat, trip.lng);
-        const currentMostRecent = mostRecentByLocation.get(key);
-
-        if (!currentMostRecent || getTripTimestamp(trip.date) > getTripTimestamp(currentMostRecent.date)) {
+        const current = mostRecentByLocation.get(key);
+        if (!current || getTripTimestamp(trip.date) > getTripTimestamp(current.date)) {
             mostRecentByLocation.set(key, trip);
         }
-    });
+    }
 
     return Array.from(mostRecentByLocation.values());
 }
@@ -101,21 +103,18 @@ export default function MapView({
     selectedTrip,
     fullScreenTrip,
     selectedActivity,
-    selectedLodging,
     onSelectTripById,
     onSelectActivity,
 }: MapViewProps) {
     const mapRef = useRef<L.Map | null>(null);
     const mapContainerRef = useRef<HTMLDivElement>(null);
-    const markersRef = useRef<L.Marker[]>([]);
-    const activityMarkersRef = useRef<L.Marker[]>([]);
+    const tripMarkersRef = useRef<L.Marker[]>([]);
+    const detailMarkersRef = useRef<L.Marker[]>([]);
     const lastFocusedLocationKeyRef = useRef<string | null>(null);
     const lastFocusedDetailKeyRef = useRef<string | null>(null);
     const selectedTripRef = useRef<MapTrip | null>(null);
     const fullScreenTripRef = useRef<MapTrip | null>(null);
     const selectedActivityRef = useRef<MapActivity | null>(null);
-    const selectedLodgingRef = useRef<MapLodging | null>(null);
-
     useEffect(() => {
         selectedTripRef.current = selectedTrip;
     }, [selectedTrip]);
@@ -129,14 +128,10 @@ export default function MapView({
     }, [selectedActivity]);
 
     useEffect(() => {
-        selectedLodgingRef.current = selectedLodging;
-    }, [selectedLodging]);
+        if (!mapContainerRef.current || mapRef.current) {
+            return;
+        }
 
-    // Initialize map
-    useEffect(() => {
-        if (!mapContainerRef.current || mapRef.current) return;
-
-        // Extended bounds to cover continental US + Alaska + Hawaii, with padding
         const usBounds = L.latLngBounds([13, -180], [76, -60]);
         const storedMapView = readStoredMapView();
         if (storedMapView) {
@@ -165,31 +160,27 @@ export default function MapView({
         map.on("moveend", () => persistMapView(map));
 
         let cancelled = false;
-
-        // Fly to user's current location if available (at most once per app session).
         if (!hasAutoCenteredOnUser && navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(
-                (pos) => {
-                    if (cancelled || hasAutoCenteredOnUser) return;
+                (position) => {
+                    if (cancelled || hasAutoCenteredOnUser) {
+                        return;
+                    }
 
                     if (
                         selectedTripRef.current !== null ||
                         fullScreenTripRef.current !== null ||
-                        selectedActivityRef.current !== null ||
-                        selectedLodgingRef.current !== null
+                        selectedActivityRef.current !== null
                     ) {
                         hasAutoCenteredOnUser = true;
                         return;
                     }
 
                     hasAutoCenteredOnUser = true;
-                    map.flyTo([pos.coords.latitude, pos.coords.longitude], 12, {
-                        duration: 1.5,
-                    });
+                    map.flyTo([position.coords.latitude, position.coords.longitude], 12, { duration: 1.2 });
                 },
                 () => {
                     hasAutoCenteredOnUser = true;
-                    // Permission denied or unavailable — stay on US default
                 },
             );
         }
@@ -201,44 +192,29 @@ export default function MapView({
         };
     }, []);
 
-    const createPhotoIcon = useCallback((trip: MapTrip, isActive: boolean) => {
+    const createTripIcon = useCallback((trip: MapTrip, isActive: boolean): L.DivIcon => {
         const size = isActive ? 80 : 64;
         const safeTitle = escapeHtml(trip.title);
         const imageUrl = trip.thumbnail || MARKER_FALLBACK_IMAGE;
-
         return L.divIcon({
             className: "photo-marker",
             html: `
         <div style="
-          width: ${size}px;
-          height: ${size}px;
-          border-radius: 12px;
-          overflow: hidden;
-          border: ${isActive ? "3px solid #d4a055" : "2px solid rgba(255,255,255,0.3)"};
-          box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-          cursor: pointer;
-          transition: all 0.2s ease;
-          position: relative;
+          width:${size}px;height:${size}px;border-radius:12px;overflow:hidden;
+          border:${isActive ? "3px solid #d4a055" : "2px solid rgba(255,255,255,0.3)"};
+          box-shadow:0 4px 20px rgba(0,0,0,0.5);position:relative;cursor:pointer;
         ">
           <img
-                        src="${imageUrl}"
-                        alt="${safeTitle}"
+            src="${imageUrl}"
+            alt="${safeTitle}"
             style="width:100%;height:100%;object-fit:cover;"
-                        onerror="this.onerror=null;this.src='${MARKER_FALLBACK_IMAGE}';"
+            onerror="this.onerror=null;this.src='${MARKER_FALLBACK_IMAGE}';"
           />
           <div style="
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            padding: 4px 6px;
-            background: linear-gradient(transparent, rgba(0,0,0,0.85));
-            color: white;
-            font-size: 10px;
-            font-weight: 600;
-            font-family: system-ui, sans-serif;
-            letter-spacing: 0.02em;
-                    ">${safeTitle}</div>
+            position:absolute;left:0;right:0;bottom:0;padding:4px 6px;
+            background:linear-gradient(transparent, rgba(0,0,0,0.85));
+            color:white;font-size:10px;font-weight:600;font-family:system-ui,sans-serif;
+          ">${safeTitle}</div>
         </div>
       `,
             iconSize: [size, size],
@@ -246,29 +222,23 @@ export default function MapView({
         });
     }, []);
 
-    const createActivityIcon = useCallback((activity: MapActivity, isActive: boolean) => {
+    const createActivityIcon = useCallback((activity: MapActivity, isActive: boolean): L.DivIcon => {
         const size = isActive ? 80 : 65;
         const safeTitle = escapeHtml(activity.title);
         const imageUrl = activity.image || MARKER_FALLBACK_IMAGE;
-
         return L.divIcon({
             className: "activity-marker",
             html: `
         <div style="
-          width: ${size}px;
-          height: ${size}px;
-          border-radius: 50%;
-          overflow: hidden;
-          border: ${isActive ? "3px solid #d4a055" : "2px solid rgba(255,255,255,0.5)"};
-          box-shadow: 0 2px 12px rgba(0,0,0,0.4);
-          cursor: pointer;
-          transition: all 0.2s ease;
+          width:${size}px;height:${size}px;border-radius:50%;overflow:hidden;
+          border:${isActive ? "3px solid #d4a055" : "2px solid rgba(255,255,255,0.5)"};
+          box-shadow:0 2px 12px rgba(0,0,0,0.4);cursor:pointer;
         ">
           <img
-                        src="${imageUrl}"
-                        alt="${safeTitle}"
+            src="${imageUrl}"
+            alt="${safeTitle}"
             style="width:100%;height:100%;object-fit:cover;"
-                        onerror="this.onerror=null;this.src='${MARKER_FALLBACK_IMAGE}';"
+            onerror="this.onerror=null;this.src='${MARKER_FALLBACK_IMAGE}';"
           />
         </div>
       `,
@@ -277,172 +247,166 @@ export default function MapView({
         });
     }, []);
 
-        const createLodgingIcon = useCallback((lodging: MapLodging, isActive: boolean) => {
-                const size = isActive ? 80 : 65;
-                const roofHeight = Math.round(size * 0.34);
-                const houseBodyHeight = size - roofHeight;
-                const safeTitle = escapeHtml(lodging.name);
-                const imageUrl = lodging.image || MARKER_FALLBACK_IMAGE;
+    const createLodgingIcon = useCallback((lodging: MapLodging, isActive: boolean): L.DivIcon => {
+        const size = isActive ? 80 : 65;
+        const roofHeight = Math.round(size * 0.34);
+        const bodyHeight = size - roofHeight;
+        const safeTitle = escapeHtml(lodging.title);
+        const imageUrl = lodging.image || MARKER_FALLBACK_IMAGE;
+        return L.divIcon({
+            className: "lodging-marker",
+            html: `
+        <div style="width:${size}px;height:${size}px;position:relative;cursor:pointer;">
+          <div style="
+            position:absolute;top:0;left:50%;transform:translateX(-50%);
+            width:0;height:0;
+            border-left:${Math.round(size / 2)}px solid transparent;
+            border-right:${Math.round(size / 2)}px solid transparent;
+            border-bottom:${roofHeight}px solid ${isActive ? "#d4a055" : "#000"};
+            filter:drop-shadow(0 3px 8px rgba(0,0,0,0.45));
+          "></div>
+          <div style="
+            position:absolute;top:${Math.max(roofHeight - 2, 0)}px;left:50%;transform:translateX(-50%);
+            width:${Math.round(size * 0.78)}px;height:${bodyHeight}px;
+            border-radius:0 0 10px 10px;overflow:hidden;
+            border:${isActive ? "3px solid #d4a055" : "2px solid #000"};
+            box-shadow:0 4px 14px rgba(0,0,0,0.45);background:#111;
+          ">
+            <img
+              src="${imageUrl}"
+              alt="${safeTitle}"
+              style="width:100%;height:100%;object-fit:cover;"
+              onerror="this.onerror=null;this.src='${MARKER_FALLBACK_IMAGE}';"
+            />
+          </div>
+        </div>
+      `,
+            iconSize: [size, size],
+            iconAnchor: [size / 2, size / 2],
+        });
+    }, []);
 
-                return L.divIcon({
-                        className: "lodging-marker",
-                        html: `
-                <div style="
-                    width: ${size}px;
-                    height: ${size}px;
-                    position: relative;
-                    cursor: pointer;
-                    transition: all 0.2s ease;
-                ">
-                    <div style="
-                        position: absolute;
-                        top: 0;
-                        left: 50%;
-                        transform: translateX(-50%);
-                        width: 0;
-                        height: 0;
-                        border-left: ${Math.round(size / 2)}px solid transparent;
-                        border-right: ${Math.round(size / 2)}px solid transparent;
-                        border-bottom: ${roofHeight}px solid ${isActive ? "#d4a055" : "#000"};
-                        filter: drop-shadow(0 3px 8px rgba(0,0,0,0.45));
-                    "></div>
-                    <div style="
-                        position: absolute;
-                        top: ${Math.max(roofHeight - 2, 0)}px;
-                        left: 50%;
-                        transform: translateX(-50%);
-                        width: ${Math.round(size * 0.78)}px;
-                        height: ${houseBodyHeight}px;
-                        border-radius: 0 0 10px 10px;
-                        overflow: hidden;
-                        border: ${isActive ? "3px solid #d4a055" : "2px solid #000"};
-                        box-shadow: 0 4px 14px rgba(0,0,0,0.45);
-                        background: #111;
-                    ">
-                        <img
-                            src="${imageUrl}"
-                            alt="${safeTitle}"
-                            style="width:100%;height:100%;object-fit:cover;"
-                            onerror="this.onerror=null;this.src='${MARKER_FALLBACK_IMAGE}';"
-                        />
-                    </div>
-                </div>
-            `,
-                        iconSize: [size, size],
-                        iconAnchor: [size / 2, size / 2],
-                });
-        }, []);
-
-    // Create/update review markers
     useEffect(() => {
         const map = mapRef.current;
-        if (!map) return;
+        if (!map) {
+            return;
+        }
 
-        // Clear existing markers
-        markersRef.current.forEach((m) => m.remove());
-        markersRef.current = [];
+        tripMarkersRef.current.forEach((marker) => marker.remove());
+        tripMarkersRef.current = [];
 
         const mostRecentTrips = getMostRecentTripsByLocation(trips);
-
         if (fullScreenTrip) {
-            const fullScreenLocationKey = getLocationKey(fullScreenTrip.lat, fullScreenTrip.lng);
-            const locationRepresentative =
-                mostRecentTrips.find((trip) => getLocationKey(trip.lat, trip.lng) === fullScreenLocationKey) ??
-                fullScreenTrip;
-
-            const icon = createPhotoIcon(locationRepresentative, true);
-            const marker = L.marker([locationRepresentative.lat, locationRepresentative.lng], { icon }).addTo(map);
-            markersRef.current.push(marker);
+            const fullScreenKey = getLocationKey(fullScreenTrip.lat, fullScreenTrip.lng);
+            const representative =
+                mostRecentTrips.find((trip) => getLocationKey(trip.lat, trip.lng) === fullScreenKey) ?? fullScreenTrip;
+            const marker = L.marker([representative.lat, representative.lng], {
+                icon: createTripIcon(representative, true),
+            }).addTo(map);
+            tripMarkersRef.current.push(marker);
             return;
         }
 
         const selectedLocationKey = selectedTrip ? getLocationKey(selectedTrip.lat, selectedTrip.lng) : null;
-
-        mostRecentTrips.forEach((trip) => {
+        for (const trip of mostRecentTrips) {
             const tripLocationKey = getLocationKey(trip.lat, trip.lng);
             const isActive = selectedLocationKey !== null && selectedLocationKey === tripLocationKey;
-            const icon = createPhotoIcon(trip, isActive);
-            const marker = L.marker([trip.lat, trip.lng], { icon })
+            const marker = L.marker([trip.lat, trip.lng], {
+                icon: createTripIcon(trip, isActive),
+            })
                 .addTo(map)
-                .on("click", () => {
-                    onSelectTripById(trip.id);
-                });
-            markersRef.current.push(marker);
-        });
-    }, [trips, selectedTrip, fullScreenTrip, createPhotoIcon, onSelectTripById]);
+                .on("click", () => onSelectTripById(trip.id));
+            tripMarkersRef.current.push(marker);
+        }
+    }, [trips, selectedTrip, fullScreenTrip, createTripIcon, onSelectTripById]);
 
-    // Create/update activity markers
     useEffect(() => {
         const map = mapRef.current;
-        if (!map) return;
-
-        // Clear existing activity markers
-        activityMarkersRef.current.forEach((m) => m.remove());
-        activityMarkersRef.current = [];
-
-        if (!fullScreenTrip) return;
-
-        fullScreenTrip.activities.forEach((activity) => {
-            const isActive = selectedActivity?.id === activity.id;
-            const icon = createActivityIcon(activity, isActive);
-            const marker = L.marker([activity.lat, activity.lng], { icon })
-                .addTo(map)
-                .on("click", () => {
-                    onSelectActivity(activity);
-                    map.flyTo([activity.lat, activity.lng], 13, {
-                        duration: 1,
-                    });
-                });
-            activityMarkersRef.current.push(marker);
-        });
-
-        (fullScreenTrip.lodging || []).forEach((lodging) => {
-            const isActive = selectedActivity?.id === lodging.id;
-            const icon = createLodgingIcon(lodging, isActive);
-            const marker = L.marker([lodging.lat, lodging.lng], { icon })
-                .addTo(map)
-                .on("click", () => {
-                    onSelectActivity(lodging);
-                    map.flyTo([lodging.lat, lodging.lng], 13, {
-                        duration: 1,
-                    });
-                });
-            activityMarkersRef.current.push(marker);
-        });
-    }, [fullScreenTrip, selectedActivity, createActivityIcon, createLodgingIcon, onSelectActivity]);
-
-    // Fly to selected review in sidebar mode
-    useEffect(() => {
-        const map = mapRef.current;
-        if (!map || fullScreenTrip) return;
-
-        if (selectedTrip) {
-            const selectedLocationKey = getLocationKey(selectedTrip.lat, selectedTrip.lng);
-            if (lastFocusedLocationKeyRef.current === selectedLocationKey) {
-                return;
-            }
-
-            lastFocusedLocationKeyRef.current = selectedLocationKey;
-            map.flyTo([selectedTrip.lat, selectedTrip.lng], SELECTED_REVIEW_ZOOM, {
-                duration: 1.2,
-            });
+        if (!map) {
             return;
         }
 
-        lastFocusedLocationKeyRef.current = null;
+        detailMarkersRef.current.forEach((marker) => marker.remove());
+        detailMarkersRef.current = [];
+
+        if (!fullScreenTrip) {
+            return;
+        }
+
+        for (const activity of fullScreenTrip.activities) {
+            const marker = L.marker([activity.lat, activity.lng], {
+                icon: createActivityIcon(activity, selectedActivity?.id === activity.id),
+            })
+                .addTo(map)
+                .on("click", () => {
+                    onSelectActivity(activity);
+                    map.flyTo([activity.lat, activity.lng], DETAIL_ZOOM, { duration: 0.9 });
+                });
+            detailMarkersRef.current.push(marker);
+        }
+
+        for (const lodging of fullScreenTrip.lodgings) {
+            const marker = L.marker([lodging.lat, lodging.lng], {
+                icon: createLodgingIcon(lodging, false),
+            })
+                .addTo(map)
+                .on("click", () => {
+                    onSelectActivity(null);
+                    map.flyTo([lodging.lat, lodging.lng], DETAIL_ZOOM, { duration: 0.9 });
+                });
+            detailMarkersRef.current.push(marker);
+        }
+    }, [fullScreenTrip, selectedActivity, createActivityIcon, createLodgingIcon, onSelectActivity]);
+
+    useEffect(() => {
+        const map = mapRef.current;
+        if (!map || fullScreenTrip) {
+            return;
+        }
+
+        if (!selectedTrip) {
+            lastFocusedLocationKeyRef.current = null;
+            return;
+        }
+
+        const locationKey = getLocationKey(selectedTrip.lat, selectedTrip.lng);
+        if (lastFocusedLocationKeyRef.current === locationKey) {
+            return;
+        }
+
+        lastFocusedLocationKeyRef.current = locationKey;
+        map.flyTo([selectedTrip.lat, selectedTrip.lng], SELECTED_REVIEW_ZOOM, { duration: 1.1 });
     }, [selectedTrip, fullScreenTrip]);
 
-    // Invalidate map size when container resizes (sidebar open/close)
+    useEffect(() => {
+        const map = mapRef.current;
+        if (!map) {
+            return;
+        }
+
+        if (selectedActivity) {
+            const key = `activity:${selectedActivity.id}`;
+            if (lastFocusedDetailKeyRef.current !== key) {
+                lastFocusedDetailKeyRef.current = key;
+                map.flyTo([selectedActivity.lat, selectedActivity.lng], DETAIL_ZOOM, { duration: 0.8 });
+            }
+            return;
+        }
+
+        lastFocusedDetailKeyRef.current = null;
+    }, [selectedActivity]);
+
     useEffect(() => {
         const map = mapRef.current;
         const container = mapContainerRef.current;
-        if (!map || !container) return;
+        if (!map || !container) {
+            return;
+        }
 
         const observer = new ResizeObserver(() => {
             map.invalidateSize({ animate: true });
         });
         observer.observe(container);
-
         return () => observer.disconnect();
     }, []);
 

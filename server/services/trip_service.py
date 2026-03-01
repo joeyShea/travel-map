@@ -277,14 +277,6 @@ def _parse_trip_date(value: Any) -> str | None:
 
 
 def _parse_thumbnail_url(value: Any) -> str | None:
-def _parse_decimal(
-    value: Any,
-    *,
-    field_name: str,
-    minimum: Decimal | None = None,
-    maximum: Decimal | None = None,
-    allow_currency_chars: bool = False,
-) -> Decimal | None:
     candidate = to_nullable_string(value)
     if not candidate:
         return None
@@ -297,6 +289,20 @@ def _parse_decimal(
         raise TripValidationError("thumbnail_url must start with http:// or https://")
 
     return candidate
+
+
+def _parse_decimal(
+    value: Any,
+    *,
+    field_name: str,
+    minimum: Decimal | None = None,
+    maximum: Decimal | None = None,
+    allow_currency_chars: bool = False,
+) -> Decimal | None:
+    candidate = to_nullable_string(value)
+    if not candidate:
+        return None
+
     normalized = candidate.strip()
     if allow_currency_chars:
         normalized = normalized.replace("$", "").replace(",", "")

@@ -70,58 +70,6 @@ function makeStopDraft(): StopDraft {
 
 const READABLE_INPUT_CLASS = "bg-white text-stone-900 placeholder:text-stone-500";
 const READABLE_TEXTAREA_CLASS = "bg-white text-stone-900 placeholder:text-stone-500";
-const MAX_IMAGE_EDGE_PX = 1600;
-const IMAGE_OUTPUT_QUALITY = 0.84;
-const MAX_UPLOAD_BYTES = 12 * 1024 * 1024;
-
-async function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
-    reader.onerror = () => reject(new Error("Unable to read selected image"));
-    reader.readAsDataURL(file);
-  });
-}
-
-async function dataUrlToImage(dataUrl: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error("Could not decode image"));
-    image.src = dataUrl;
-  });
-}
-
-async function fileToOptimizedDataUrl(file: File): Promise<string> {
-  if (file.size > MAX_UPLOAD_BYTES) {
-    throw new Error("Image is too large. Please choose one under 12MB.");
-  }
-
-  const sourceDataUrl = await fileToDataUrl(file);
-  const image = await dataUrlToImage(sourceDataUrl);
-
-  const longestEdge = Math.max(image.naturalWidth || image.width, image.naturalHeight || image.height);
-  if (!longestEdge || longestEdge <= MAX_IMAGE_EDGE_PX) {
-    return sourceDataUrl;
-  }
-
-  const scale = MAX_IMAGE_EDGE_PX / longestEdge;
-  const nextWidth = Math.max(1, Math.round((image.naturalWidth || image.width) * scale));
-  const nextHeight = Math.max(1, Math.round((image.naturalHeight || image.height) * scale));
-
-  const canvas = document.createElement("canvas");
-  canvas.width = nextWidth;
-  canvas.height = nextHeight;
-
-  const context = canvas.getContext("2d");
-  if (!context) {
-    return sourceDataUrl;
-  }
-
-  context.drawImage(image, 0, 0, nextWidth, nextHeight);
-  const optimizedDataUrl = canvas.toDataURL("image/jpeg", IMAGE_OUTPUT_QUALITY);
-  return optimizedDataUrl || sourceDataUrl;
-}
 
 function hasStopContent(stop: StopDraft): boolean {
   return Boolean(
@@ -147,7 +95,6 @@ export default function TripsPage() {
   const [description, setDescription] = useState("");
   const [coverImage, setCoverImage] = useState("");
   const [coverImageName, setCoverImageName] = useState("");
-  const [coverImageStatus, setCoverImageStatus] = useState<"idle" | "processing" | "ready" | "error">("idle");
   const [coverImageError, setCoverImageError] = useState("");
   const [tripLocation, setTripLocation] = useState<PlaceOption | null>(null);
   const [cost, setCost] = useState("");
@@ -214,7 +161,7 @@ export default function TripsPage() {
     setActivities((current) => current.filter((stop) => stop.id !== id));
   }
 
-  async function handleStopImageChange(kind: "lodging" | "activity", id: string, file?: File) {
+  async function handleStopImageUpload(kind: "lodging" | "activity", id: string, file?: File) {
     if (!file) {
       updateStop(kind, id, {
         imageUrl: "",
@@ -231,43 +178,44 @@ export default function TripsPage() {
     });
 
     try {
-      const dataUrl = await fileToOptimizedDataUrl(file);
+      const imageUrl = await uploadImage(file, kind === "lodging" ? "trips/lodging" : "trips/activity");
       updateStop(kind, id, {
-        imageUrl: dataUrl,
+        imageUrl,
         imageName: file.name,
         imageError: "",
         isProcessingImage: false,
       });
-    } catch (imageError) {
+    } catch {
       updateStop(kind, id, {
-        imageError: imageError instanceof Error ? imageError.message : "Unable to process this image.",
+        imageError: "Could not upload this image. Please try again.",
         isProcessingImage: false,
       });
+      setError("Could not upload one of the stop images. Please try again.");
     }
   }
 
-  async function handleCoverImageChange(file?: File) {
+  async function handleCoverImageUpload(file?: File) {
     if (!file) {
       setCoverImage("");
       setCoverImageName("");
-      setCoverImageStatus("idle");
       setCoverImageError("");
       return;
     }
 
-    setCoverImageStatus("processing");
+    setIsUploadingImage(true);
     setCoverImageError("");
 
     try {
-      const dataUrl = await fileToOptimizedDataUrl(file);
-      setCoverImage(dataUrl);
+      const imageUrl = await uploadImage(file, "trips/cover");
+      setCoverImage(imageUrl);
       setCoverImageName(file.name);
-      setCoverImageStatus("ready");
-    } catch (imageError) {
+    } catch {
       setCoverImage("");
       setCoverImageName("");
-      setCoverImageStatus("error");
-      setCoverImageError(imageError instanceof Error ? imageError.message : "Unable to process this image.");
+      setCoverImageError("Could not upload cover image. Please try again.");
+      setError("Could not upload cover image. Please try again.");
+    } finally {
+      setIsUploadingImage(false);
     }
   }
 
@@ -365,29 +313,14 @@ export default function TripsPage() {
                     disabled={isUploadingImage}
                     className="sr-only"
                     onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      if (!file) {
-                        setCoverImage("");
-                        return;
-                      }
-
-                      try {
-                        setError("");
-                        setIsUploadingImage(true);
-                        const imageUrl = await uploadImage(file, "trips/cover");
-                        setCoverImage(imageUrl);
-                      } catch {
-                        setError("Could not upload cover image. Please try again.");
-                      } finally {
-                        setIsUploadingImage(false);
-                      }
+                      void handleCoverImageUpload(event.target.files?.[0]);
                     }}
                   />
                 </label>
                 <div className="space-y-1 text-sm text-stone-500">
                   <p>
-                    {coverImageStatus === "processing"
-                      ? "Processing cover image..."
+                    {isUploadingImage
+                      ? "Uploading cover image..."
                       : coverImage
                         ? "Cover selected. Preview updates live."
                         : "No cover yet. Add one to set the tone."}
@@ -562,33 +495,59 @@ export default function TripsPage() {
                         />
                         <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-md border border-stone-200 bg-white px-3 py-2 text-sm text-stone-600 transition-colors hover:bg-stone-100">
                           <ImagePlus className="h-4 w-4 text-amber-700" />
-                          Add photo
+                          {stop.imageUrl ? "Change photo" : "Add photo"}
                           <input
                             type="file"
                             accept="image/*"
+                            disabled={stop.isProcessingImage}
                             className="sr-only"
-                            onChange={async (event) => {
-                              const file = event.target.files?.[0];
-                              if (!file) {
-                                updateStop("lodging", stop.id, { imageUrl: "" });
-                                return;
-                              }
-                              try {
-                                setError("");
-                                updateStop("lodging", stop.id, { isProcessingImage: true });
-                                const imageUrl = await uploadImage(file, "trips/lodging");
-                              }
-                              catch {
-                                updateStop("lodging", stop.id, { imageError: "Could not upload this image. Please try again.", isProcessingImage: false });
-                                setError("Could not upload one of the stop images. Please try again.");
-                              }
-                              finally {
-                                updateStop("lodging", stop.id, { isProcessingImage: false });
-                              }
+                            onChange={(event) => {
+                              setError("");
+                              void handleStopImageUpload("lodging", stop.id, event.target.files?.[0]);
                             }}
                           />
                         </label>
                       </div>
+                      {stop.isProcessingImage ? (
+                        <p className="text-xs text-stone-500">Uploading image...</p>
+                      ) : stop.imageUrl ? (
+                        <p className="text-xs text-emerald-700">Photo uploaded.</p>
+                      ) : (
+                        <p className="text-xs text-stone-500">No photo selected.</p>
+                      )}
+                      {stop.imageError ? <p className="text-xs font-medium text-red-600">{stop.imageError}</p> : null}
+                      {stop.imageUrl ? (
+                        <div className="rounded-lg border border-stone-200 bg-white p-2">
+                          <div className="flex items-center gap-3">
+                            <img
+                              src={stop.imageUrl}
+                              alt={stop.title ? `${stop.title} preview` : "Stay photo preview"}
+                              className="h-20 w-20 rounded-md border border-stone-200 object-cover"
+                            />
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-xs font-medium text-stone-700">
+                                {stop.imageName || "Selected image"}
+                              </p>
+                              <p className="text-xs text-stone-500">Preview shown as it will appear in this post.</p>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="rounded-full"
+                              onClick={() =>
+                                updateStop("lodging", stop.id, {
+                                  imageUrl: "",
+                                  imageName: "",
+                                  imageError: "",
+                                  isProcessingImage: false,
+                                })
+                              }
+                            >
+                              Remove
+                            </Button>
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 ))}
@@ -666,71 +625,55 @@ export default function TripsPage() {
                           <input
                             type="file"
                             accept="image/*"
+                            disabled={stop.isProcessingImage}
                             className="sr-only"
-                            onChange={async (event) => {
-                              const file = event.target.files?.[0];
-                              if (!file) {
-                                updateStop("activity", stop.id, { imageUrl: "" });
-                                return;
-                              }
-                              try {
-                                setError("");
-                                updateStop("activity", stop.id, { isProcessingImage: true });
-                                const imageUrl = await uploadImage(file, "trips/activity");
-                                updateStop("activity", stop.id, { imageUrl });
-                              }
-                              catch {
-                                updateStop("activity", stop.id, { imageError: "Could not upload this image. Please try again.", isProcessingImage: false });
-                                setError("Could not upload one of the stop images. Please try again.");
-                              }
-                              finally {
-                                updateStop("activity", stop.id, { isProcessingImage: false });
-                              }
+                            onChange={(event) => {
+                              setError("");
+                              void handleStopImageUpload("activity", stop.id, event.target.files?.[0]);
                             }}
                           />
                         </label>
-                        {/* {stop.isProcessingImage ? (
-                            <p className="text-xs text-stone-500">Processing image...</p>
-                          ) : stop.imageUrl ? (
-                            <p className="text-xs text-emerald-700">Photo attached.</p>
-                          ) : (
-                            <p className="text-xs text-stone-500">No photo selected.</p>
-                          )}
-                          {stop.imageError ? <p className="text-xs font-medium text-red-600">{stop.imageError}</p> : null}
-                        </div>
-                        {stop.imageUrl ? (
-                          <div className="sm:col-span-2">
-                            <div className="flex items-center gap-3 rounded-lg border border-stone-200 bg-white p-2">
-                              <img
-                                src={stop.imageUrl}
-                                alt={stop.title ? `${stop.title} preview` : "Activity photo preview"}
-                                className="h-20 w-20 rounded-md border border-stone-200 object-cover"
-                              />
-                              <div className="min-w-0 flex-1">
-                                <p className="truncate text-xs font-medium text-stone-700">
-                                  {stop.imageName || "Selected image"}
-                                </p>
-                                <p className="text-xs text-stone-500">Preview shown as it will appear in this post.</p>
-                              </div>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className="rounded-full"
-                                onClick={() =>
-                                  updateStop("activity", stop.id, {
-                                    imageUrl: "",
-                                    imageName: "",
-                                    imageError: "",
-                                    isProcessingImage: false,
-                                  })
-                                }
-                              >
-                                Remove
-                              </Button>
-                            </div>
-                          </div>
-                        ) : null} */}
                       </div>
+                      {stop.isProcessingImage ? (
+                        <p className="text-xs text-stone-500">Uploading image...</p>
+                      ) : stop.imageUrl ? (
+                        <p className="text-xs text-emerald-700">Photo uploaded.</p>
+                      ) : (
+                        <p className="text-xs text-stone-500">No photo selected.</p>
+                      )}
+                      {stop.imageError ? <p className="text-xs font-medium text-red-600">{stop.imageError}</p> : null}
+                      {stop.imageUrl ? (
+                        <div className="rounded-lg border border-stone-200 bg-white p-2">
+                          <div className="flex items-center gap-3">
+                            <img
+                              src={stop.imageUrl}
+                              alt={stop.title ? `${stop.title} preview` : "Activity photo preview"}
+                              className="h-20 w-20 rounded-md border border-stone-200 object-cover"
+                            />
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-xs font-medium text-stone-700">
+                                {stop.imageName || "Selected image"}
+                              </p>
+                              <p className="text-xs text-stone-500">Preview shown as it will appear in this post.</p>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="rounded-full"
+                              onClick={() =>
+                                updateStop("activity", stop.id, {
+                                  imageUrl: "",
+                                  imageName: "",
+                                  imageError: "",
+                                  isProcessingImage: false,
+                                })
+                              }
+                            >
+                              Remove
+                            </Button>
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 ))}
@@ -796,13 +739,31 @@ export default function TripsPage() {
                   <div>
                     <p className="font-semibold text-stone-800">Stays ({previewLodgings.length})</p>
                     {previewLodgings.length > 0 ? (
-                      <ul className="mt-1 space-y-1 text-stone-600">
+                      <div className="mt-2 space-y-2">
                         {previewLodgings.map((stop) => (
-                          <li key={stop.id}>
-                            {stop.title || stop.location?.label || stop.location?.address || "Untitled stay"}
-                          </li>
+                          <article key={stop.id} className="rounded-xl border border-stone-200 bg-white p-2">
+                            <div className="flex items-start gap-3">
+                              <img
+                                src={stop.imageUrl || BANNER_PLACEHOLDER}
+                                alt={stop.title ? `${stop.title} preview` : "Stay preview"}
+                                className="h-16 w-16 rounded-md border border-stone-200 object-cover"
+                              />
+                              <div className="min-w-0 flex-1 space-y-1">
+                                <p className="truncate text-sm font-semibold text-stone-800">
+                                  {stop.title || "Untitled stay"}
+                                </p>
+                                <p className="truncate text-xs text-stone-500">
+                                  {stop.location?.label || stop.location?.address || "Location not set"}
+                                </p>
+                                <p className="max-h-10 overflow-hidden text-xs leading-relaxed text-stone-600">
+                                  {stop.notes || "No stay notes yet."}
+                                </p>
+                                <p className="text-xs text-stone-500">{stop.cost ? `Cost: ${stop.cost}` : "No cost added"}</p>
+                              </div>
+                            </div>
+                          </article>
                         ))}
-                      </ul>
+                      </div>
                     ) : (
                       <p className="mt-1 text-stone-500">No stays added.</p>
                     )}
