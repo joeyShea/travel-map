@@ -1,6 +1,7 @@
 "use client";
 
 import { ChangeEvent, useEffect, useMemo, useState } from "react";
+import { Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Camera, GraduationCap, UserRound, Globe, ArrowRight } from "lucide-react";
 import { createProfileSetup, uploadImage } from "@/lib/api-client";
@@ -29,6 +30,14 @@ async function updateUserProfileInDatabase(payload: ProfileSetupPayload): Promis
 const TRANSITION_MS = 260;
 
 export default function ProfileSetupPage() {
+    return (
+        <Suspense fallback={<div className="min-h-screen bg-[#fdf8f0]" />}>
+            <ProfileSetupContent />
+        </Suspense>
+    );
+}
+
+function ProfileSetupContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const { refreshSession, refreshMyProfile } = useAuth();
