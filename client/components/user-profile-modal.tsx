@@ -2,6 +2,8 @@
 
 import Image from "next/image";
 import { X, Mail, GraduationCap, Trash2 } from "lucide-react";
+import { useAuth } from "@/components/auth-provider";
+import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -45,18 +47,18 @@ export default function UserProfileModal({
     onDeleteTrip,
     expandFrom = "top-right",
 }: UserProfileModalProps) {
+    const { signOut } = useAuth();
     const animClass = expandFrom === "left" ? "modal-expand-left" : "modal-expand";
 
     return (
         <>
             {/* Backdrop */}
-            <div
-                className="backdrop-fade fixed inset-0 z-[1500] bg-foreground/10 backdrop-blur-sm"
-                onClick={onClose}
-            />
+            <div className="backdrop-fade fixed inset-0 z-[1500] bg-foreground/10 backdrop-blur-sm" onClick={onClose} />
 
             {/* Modal */}
-            <div className={`${animClass} fixed inset-3 sm:inset-6 z-[1600] flex flex-col rounded-2xl bg-card border border-border shadow-2xl overflow-hidden`}>
+            <div
+                className={`${animClass} fixed inset-3 sm:inset-6 z-[1600] flex flex-col rounded-2xl bg-card border border-border shadow-2xl overflow-hidden`}
+            >
                 {/* Close button */}
                 <button
                     onClick={onClose}
@@ -85,13 +87,16 @@ export default function UserProfileModal({
                                     <GraduationCap className="h-3.5 w-3.5 flex-shrink-0" />
                                     {profile.university}
                                 </p>
+                                <div className="pt-2">
+                                    <Button type="button" variant="outline" size="sm" onClick={() => void signOut()}>
+                                        Logout
+                                    </Button>
+                                </div>
                             </div>
                         </div>
 
                         {/* Bio */}
-                        <p className="max-w-2xl text-sm leading-relaxed text-foreground/75 mb-8">
-                            {profile.bio}
-                        </p>
+                        <p className="max-w-2xl text-sm leading-relaxed text-foreground/75 mb-8">{profile.bio}</p>
 
                         <div className="h-px bg-border mb-8" />
 
@@ -127,9 +132,7 @@ export default function UserProfileModal({
                                                     <p className="text-sm font-semibold text-foreground truncate">
                                                         {trip.title}
                                                     </p>
-                                                    <p className="text-xs text-muted-foreground mt-0.5">
-                                                        {trip.date}
-                                                    </p>
+                                                    <p className="text-xs text-muted-foreground mt-0.5">{trip.date}</p>
                                                 </div>
                                             </button>
                                             {canManageTrips ? (

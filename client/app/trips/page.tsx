@@ -11,22 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { createTrip } from "@/lib/api-client";
+import { AVAILABLE_TAGS, BANNER_PLACEHOLDER } from "@/lib/trip-constants";
 import type { TripDuration, TripVisibility } from "@/lib/api-types";
-
-const AVAILABLE_TAGS = [
-  "beach",
-  "city",
-  "adventure",
-  "budget-friendly",
-  "luxury",
-  "foodie",
-  "nightlife",
-  "nature",
-  "cultural",
-] as const;
-
-const BANNER_PLACEHOLDER =
-  "https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=1200&q=80";
 
 interface StopDraft {
   id: string;

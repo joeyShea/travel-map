@@ -7,7 +7,7 @@ import type {
   UserProfileResponse,
 } from "@/lib/api-types";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5001";
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5001";
 
 class ApiError extends Error {
   status: number;
@@ -52,6 +52,10 @@ export async function getSession(): Promise<SessionResponse> {
     }
     throw error;
   }
+}
+
+export async function logoutSession(): Promise<void> {
+  await requestJson<{ message: string }>("/logout", { method: "POST" });
 }
 
 export async function createProfileSetup(payload: {

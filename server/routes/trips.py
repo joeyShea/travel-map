@@ -17,7 +17,6 @@ from services.trip_service import (
 
 trips_bp = Blueprint("trips", __name__)
 
-
 @trips_bp.route("/trips", methods=["GET", "OPTIONS"])
 def get_trips():
     if request.method == "OPTIONS":
