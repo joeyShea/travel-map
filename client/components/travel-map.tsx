@@ -684,6 +684,10 @@ export default function TravelMap() {
                     onSelectTrip={(tripId) => {
                         void openTripById(tripId);
                     }}
+                    onAddTrip={() => {
+                        const returnTo = pathname || "/";
+                        router.push(`/trips?returnTo=${encodeURIComponent(returnTo)}`);
+                    }}
                     onClose={() => setProfileState(null)}
                 />
             )}

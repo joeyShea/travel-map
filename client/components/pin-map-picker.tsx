@@ -42,7 +42,7 @@ export default function PinMapPicker({
     return DEFAULT_CENTER;
   }, [cityContext, initialValue]);
 
-  const initialZoom = cityContext ? 12 : 5;
+  const initialZoom = cityContext ?? initialValue ? 12 : 5;
 
   useEffect(() => {
     if (!open) {
@@ -66,11 +66,16 @@ export default function PinMapPicker({
       attributionControl: false,
     });
 
-    L.tileLayer("https://tile.jawg.io/jawg-sunny/{z}/{x}/{y}{r}.png?access-token={accessToken}", {
-      maxZoom: 22,
+    // L.tileLayer("https://tile.jawg.io/jawg-sunny/{z}/{x}/{y}{r}.png?access-token={accessToken}", {
+    //   maxZoom: 22,
+    //   minZoom: 4,
+    //   accessToken: process.env.NEXT_PUBLIC_JAWG_API_KEY ?? "",
+    // } as L.TileLayerOptions & { accessToken: string }).addTo(map);
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+      maxZoom: 19,
       minZoom: 4,
-      accessToken: process.env.NEXT_PUBLIC_JAWG_API_KEY ?? "",
-    } as L.TileLayerOptions & { accessToken: string }).addTo(map);
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/">CARTO</a>',
+    }).addTo(map);
 
     L.control.zoom({ position: "bottomright" }).addTo(map);
 
@@ -141,7 +146,7 @@ export default function PinMapPicker({
 
   return (
     <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/35 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-3xl overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl">
+      <div className="w-full max-w-3xl overflow-y-auto rounded-2xl border border-stone-200 bg-white shadow-2xl" style={{ maxHeight: "calc(100vh - 2rem)" }}>
         <div className="flex items-center justify-between border-b border-stone-200 px-4 py-3">
           <div>
             <h3 className="text-base font-semibold text-stone-900">Drop a pin</h3>

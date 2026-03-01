@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { X, Mail, GraduationCap, Trash2 } from "lucide-react";
+import { X, Mail, GraduationCap, Trash2, Plus } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -34,6 +34,7 @@ interface UserProfileModalProps {
     profile: UserProfile;
     onClose: () => void;
     onSelectTrip?: (tripId: number) => void;
+    onAddTrip?: () => void;
     canManageTrips?: boolean;
     deletingTripId?: number | null;
     onDeleteTrip?: (tripId: number) => void;
@@ -65,6 +66,7 @@ export default function UserProfileModal({
     profile,
     onClose,
     onSelectTrip,
+    onAddTrip,
     canManageTrips = false,
     deletingTripId = null,
     onDeleteTrip,
@@ -136,58 +138,71 @@ export default function UserProfileModal({
                         <div className="h-px bg-border mb-8" />
 
                         {/* Trips */}
-                        {profile.trips.length > 0 ? (
-                            <>
-                                <h2 className="mb-4 text-xs font-medium uppercase tracking-widest text-muted-foreground">
-                                    Trips
-                                </h2>
-                                <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
-                                    {profile.trips.map((trip) => (
-                                        <div
-                                            key={trip.id}
-                                            className="group relative flex flex-col overflow-hidden rounded-xl border border-border bg-background hover:border-primary/30 transition-colors"
+                        {(canManageTrips || profile.trips.length > 0) && (
+                            <h2 className="mb-4 text-xs font-medium uppercase tracking-widest text-muted-foreground">
+                                Trips
+                            </h2>
+                        )}
+                        {canManageTrips || profile.trips.length > 0 ? (
+                            <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
+                                {canManageTrips && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            onClose();
+                                            onAddTrip?.();
+                                        }}
+                                        className="group flex aspect-[4/3] flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border bg-background text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-primary"
+                                    >
+                                        <Plus className="h-6 w-6" />
+                                        <span className="text-sm font-medium">Add Trip</span>
+                                    </button>
+                                )}
+                                {profile.trips.map((trip) => (
+                                    <div
+                                        key={trip.id}
+                                        className="group relative flex flex-col overflow-hidden rounded-xl border border-border bg-background hover:border-primary/30 transition-colors"
+                                    >
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                onSelectTrip?.(trip.id);
+                                                onClose();
+                                            }}
+                                            className="text-left"
                                         >
+                                            <div className="relative aspect-video overflow-hidden">
+                                                <Image
+                                                    src={trip.thumbnail}
+                                                    alt={trip.title}
+                                                    fill
+                                                    className="object-cover transition-transform duration-300 group-hover:scale-105"
+                                                />
+                                            </div>
+                                            <div className="px-3 py-2.5">
+                                                <p className="text-sm font-semibold text-foreground truncate">
+                                                    {trip.title}
+                                                </p>
+                                                <p className="text-xs text-muted-foreground mt-0.5">{trip.date}</p>
+                                            </div>
+                                        </button>
+                                        {canManageTrips ? (
                                             <button
                                                 type="button"
-                                                onClick={() => {
-                                                    onSelectTrip?.(trip.id);
-                                                    onClose();
+                                                onClick={(event) => {
+                                                    event.stopPropagation();
+                                                    onDeleteTrip?.(trip.id);
                                                 }}
-                                                className="text-left"
+                                                disabled={deletingTripId === trip.id}
+                                                className="absolute right-2 top-2 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full bg-black/55 text-white transition-colors hover:bg-black/75 disabled:cursor-not-allowed disabled:opacity-70"
+                                                aria-label={`Delete ${trip.title}`}
                                             >
-                                                <div className="relative aspect-video overflow-hidden">
-                                                    <Image
-                                                        src={trip.thumbnail}
-                                                        alt={trip.title}
-                                                        fill
-                                                        className="object-cover transition-transform duration-300 group-hover:scale-105"
-                                                    />
-                                                </div>
-                                                <div className="px-3 py-2.5">
-                                                    <p className="text-sm font-semibold text-foreground truncate">
-                                                        {trip.title}
-                                                    </p>
-                                                    <p className="text-xs text-muted-foreground mt-0.5">{trip.date}</p>
-                                                </div>
+                                                <Trash2 className="h-4 w-4" />
                                             </button>
-                                            {canManageTrips ? (
-                                                <button
-                                                    type="button"
-                                                    onClick={(event) => {
-                                                        event.stopPropagation();
-                                                        onDeleteTrip?.(trip.id);
-                                                    }}
-                                                    disabled={deletingTripId === trip.id}
-                                                    className="absolute right-2 top-2 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full bg-black/55 text-white transition-colors hover:bg-black/75 disabled:cursor-not-allowed disabled:opacity-70"
-                                                    aria-label={`Delete ${trip.title}`}
-                                                >
-                                                    <Trash2 className="h-4 w-4" />
-                                                </button>
-                                            ) : null}
-                                        </div>
-                                    ))}
-                                </div>
-                            </>
+                                        ) : null}
+                                    </div>
+                                ))}
+                            </div>
                         ) : (
                             <p className="text-sm text-muted-foreground">No trips posted yet.</p>
                         )}

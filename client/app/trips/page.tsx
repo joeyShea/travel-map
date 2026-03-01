@@ -102,6 +102,7 @@ export default function TripsPage() {
   const [date, setDate] = useState("");
   const [visibility, setVisibility] = useState<TripVisibility>("public");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [customTagInput, setCustomTagInput] = useState("");
 
   const [lodgings, setLodgings] = useState<StopDraft[]>([]);
   const [activities, setActivities] = useState<StopDraft[]>([]);
@@ -128,6 +129,16 @@ export default function TripsPage() {
       }
       return [...current, tag];
     });
+  }
+
+  function addCustomTag() {
+    const tag = customTagInput.trim().toLowerCase();
+    if (!tag || selectedTags.includes(tag)) {
+      setCustomTagInput("");
+      return;
+    }
+    setSelectedTags((current) => [...current, tag]);
+    setCustomTagInput("");
   }
 
   function addStop(kind: "lodging" | "activity") {
@@ -347,6 +358,7 @@ export default function TripsPage() {
                 value={tripLocation}
                 onChange={setTripLocation}
                 mode="city"
+                allowMapPin
               />
 
               <Textarea
@@ -426,6 +438,43 @@ export default function TripsPage() {
                       </button>
                     );
                   })}
+                  {selectedTags
+                    .filter((tag) => !(AVAILABLE_TAGS as readonly string[]).includes(tag))
+                    .map((tag) => (
+                      <button
+                        key={tag}
+                        type="button"
+                        onClick={() => toggleTag(tag)}
+                        className="flex items-center gap-1 rounded-full border border-amber-600 bg-amber-600 px-3 py-1.5 text-xs font-semibold tracking-wide text-white transition-colors hover:bg-amber-700"
+                      >
+                        {tag}
+                        <span className="text-white/70">×</span>
+                      </button>
+                    ))}
+                  <div className="flex items-center gap-1">
+                    <input
+                      value={customTagInput}
+                      onChange={(e) => setCustomTagInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          addCustomTag();
+                        }
+                      }}
+                      placeholder="Other..."
+                      className="w-24 rounded-full border border-stone-300 bg-white px-3 py-1.5 text-xs font-semibold text-stone-700 outline-none focus:border-amber-500"
+                    />
+                    {customTagInput.trim() && (
+                      <button
+                        type="button"
+                        onClick={addCustomTag}
+                        className="flex h-7 w-7 items-center justify-center rounded-full border border-amber-600 bg-amber-600 text-white hover:bg-amber-700"
+                        aria-label="Add custom tag"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

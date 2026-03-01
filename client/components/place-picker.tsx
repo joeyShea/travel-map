@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import { Loader2, MapPin, X } from "lucide-react";
 
-import PinMapPicker from "@/components/pin-map-picker";
 import type { PlaceCenter, PlaceOption } from "@/lib/place-types";
+
+const PinMapPicker = dynamic(() => import("@/components/pin-map-picker"), { ssr: false });
 
 type PlaceSearchMode = "city" | "address";
 
@@ -155,9 +157,11 @@ export default function PlacePicker({
           </p>
         ) : (
           <span className="text-xs text-stone-500">
-            {mode === "city"
-              ? "Pick a broad area like a city or suburb."
-              : "Search an address or drop a pin on the map."}
+            {mode === "city" && allowMapPin
+              ? "Search a city, or drop a pin for a precise location."
+              : mode === "city"
+                ? "Pick a broad area like a city or suburb."
+                : "Search an address or drop a pin on the map."}
           </span>
         )}
 

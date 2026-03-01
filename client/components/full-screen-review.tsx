@@ -5,11 +5,7 @@ import { ArrowLeft, BedDouble, Calendar, MapPin, Notebook, User } from "lucide-r
 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import {
-    type MapActivity,
-    type MapLodging,
-    type MapTrip,
-} from "@/lib/trip-models";
+import { type MapActivity, type MapLodging, type MapTrip } from "@/lib/trip-models";
 
 interface FullScreenReviewProps {
     review: MapTrip;
@@ -115,7 +111,12 @@ export default function FullScreenReview({
                                 >
                                     <div className="grid gap-3 sm:grid-cols-[8rem,1fr]">
                                         <div className="relative h-28 w-full overflow-hidden rounded-lg sm:h-24">
-                                            <Image src={lodging.image} alt={lodging.title} fill className="object-cover" />
+                                            <Image
+                                                src={lodging.image}
+                                                alt={lodging.title}
+                                                fill
+                                                className="object-cover"
+                                            />
                                         </div>
                                         <div className="flex min-w-0 flex-col gap-1.5">
                                             <h3 className="text-base font-semibold text-foreground">{lodging.title}</h3>
@@ -144,7 +145,9 @@ export default function FullScreenReview({
                                 <button
                                     key={activity.id}
                                     type="button"
-                                    onClick={() => onSelectActivity(selectedActivity?.id === activity.id ? null : activity)}
+                                    onClick={() =>
+                                        onSelectActivity(selectedActivity?.id === activity.id ? null : activity)
+                                    }
                                     className={cn(
                                         "w-full rounded-xl border p-3 text-left transition-colors",
                                         selectedActivity?.id === activity.id
@@ -154,7 +157,12 @@ export default function FullScreenReview({
                                 >
                                     <div className="flex flex-col gap-3">
                                         <div className="relative h-40 w-full overflow-hidden rounded-lg">
-                                            <Image src={activity.image} alt={activity.title} fill className="object-cover" />
+                                            <Image
+                                                src={activity.image}
+                                                alt={activity.title}
+                                                fill
+                                                className="object-cover"
+                                            />
                                         </div>
                                         <div className="flex flex-col gap-1.5">
                                             <div className="flex min-w-0 items-start justify-between gap-2">

@@ -5,7 +5,6 @@ import { useMemo, useState } from "react";
 import { Search, SlidersHorizontal, X, DollarSign, User, Tag, MapPin, BedDouble } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Slider } from "@/components/ui/slider";
-import { AVAILABLE_TAGS } from "@/lib/trip-constants";
 import type { MapActivity, MapLodging, MapTrip } from "@/lib/trip-models";
 
 const MAX_COST = 500;
@@ -27,6 +26,18 @@ interface SearchSidebarPanelProps {
 export default function SearchSidebarPanel({ query, trips, onQueryChange, onClose, onSelectTrip }: SearchSidebarPanelProps) {
     const [selectedTags, setSelectedTags] = useState<string[]>([]);
     const [maxCost, setMaxCost] = useState(MAX_COST);
+
+    const availableTags = useMemo(() => {
+        const counts = new Map<string, number>();
+        for (const trip of trips) {
+            for (const tag of trip.tags) {
+                counts.set(tag, (counts.get(tag) ?? 0) + 1);
+            }
+        }
+        return Array.from(counts.entries())
+            .sort((a, b) => b[1] - a[1])
+            .map(([tag]) => tag);
+    }, [trips]);
 
     const searchResults = useMemo<SearchResult[]>(() => {
         const q = query.trim().toLowerCase();
@@ -135,7 +146,7 @@ export default function SearchSidebarPanel({ query, trips, onQueryChange, onClos
                                 Tags
                             </p>
                             <div className="flex flex-wrap gap-1.5">
-                                {AVAILABLE_TAGS.map((tag) => {
+                                {availableTags.map((tag) => {
                                     const active = selectedTags.includes(tag);
                                     return (
                                         <button
