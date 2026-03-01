@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 import re
 from typing import Any
 
@@ -277,6 +277,14 @@ def _parse_trip_date(value: Any) -> str | None:
 
 
 def _parse_thumbnail_url(value: Any) -> str | None:
+def _parse_decimal(
+    value: Any,
+    *,
+    field_name: str,
+    minimum: Decimal | None = None,
+    maximum: Decimal | None = None,
+    allow_currency_chars: bool = False,
+) -> Decimal | None:
     candidate = to_nullable_string(value)
     if not candidate:
         return None
@@ -289,6 +297,38 @@ def _parse_thumbnail_url(value: Any) -> str | None:
         raise TripValidationError("thumbnail_url must start with http:// or https://")
 
     return candidate
+    normalized = candidate.strip()
+    if allow_currency_chars:
+        normalized = normalized.replace("$", "").replace(",", "")
+
+    try:
+        parsed = Decimal(normalized)
+    except (InvalidOperation, ValueError):
+        raise TripValidationError(f"{field_name} must be a valid number")
+
+    if minimum is not None and parsed < minimum:
+        raise TripValidationError(f"{field_name} must be at least {minimum}")
+    if maximum is not None and parsed > maximum:
+        raise TripValidationError(f"{field_name} must be at most {maximum}")
+
+    return parsed
+
+
+def _parse_latitude(value: Any, *, field_name: str = "latitude") -> Decimal | None:
+    return _parse_decimal(value, field_name=field_name, minimum=Decimal("-90"), maximum=Decimal("90"))
+
+
+def _parse_longitude(value: Any, *, field_name: str = "longitude") -> Decimal | None:
+    return _parse_decimal(value, field_name=field_name, minimum=Decimal("-180"), maximum=Decimal("180"))
+
+
+def _parse_cost(value: Any, *, field_name: str = "cost") -> Decimal | None:
+    return _parse_decimal(
+        value,
+        field_name=field_name,
+        minimum=Decimal("0"),
+        allow_currency_chars=True,
+    )
 
 
 def _insert_tags(cur, *, trip_id: int, tags: list[Any]):
@@ -308,9 +348,14 @@ def _insert_tags(cur, *, trip_id: int, tags: list[Any]):
 
 
 def _insert_lodgings(cur, *, trip_id: int, lodgings: list[Any]):
-    for lodging in lodgings:
+    for index, lodging in enumerate(lodgings):
         if not isinstance(lodging, dict):
             continue
+
+        field_prefix = f"lodgings[{index + 1}]"
+        latitude = _parse_latitude(lodging.get("latitude"), field_name=f"{field_prefix}.latitude")
+        longitude = _parse_longitude(lodging.get("longitude"), field_name=f"{field_prefix}.longitude")
+        cost = _parse_cost(lodging.get("cost"), field_name=f"{field_prefix}.cost")
 
         cur.execute(
             """
@@ -332,17 +377,22 @@ def _insert_lodgings(cur, *, trip_id: int, lodgings: list[Any]):
                 _parse_thumbnail_url(lodging.get("thumbnail_url")),
                 to_nullable_string(lodging.get("title")),
                 to_nullable_string(lodging.get("description")),
-                to_nullable_string(lodging.get("latitude")),
-                to_nullable_string(lodging.get("longitude")),
-                to_nullable_string(lodging.get("cost")),
+                latitude,
+                longitude,
+                cost,
             ),
         )
 
 
 def _insert_activities(cur, *, trip_id: int, activities: list[Any]):
-    for activity in activities:
+    for index, activity in enumerate(activities):
         if not isinstance(activity, dict):
             continue
+
+        field_prefix = f"activities[{index + 1}]"
+        latitude = _parse_latitude(activity.get("latitude"), field_name=f"{field_prefix}.latitude")
+        longitude = _parse_longitude(activity.get("longitude"), field_name=f"{field_prefix}.longitude")
+        cost = _parse_cost(activity.get("cost"), field_name=f"{field_prefix}.cost")
 
         cur.execute(
             """
@@ -366,9 +416,9 @@ def _insert_activities(cur, *, trip_id: int, activities: list[Any]):
                 to_nullable_string(activity.get("title")),
                 to_nullable_string(activity.get("location")),
                 to_nullable_string(activity.get("description")),
-                to_nullable_string(activity.get("latitude")),
-                to_nullable_string(activity.get("longitude")),
-                to_nullable_string(activity.get("cost")),
+                latitude,
+                longitude,
+                cost,
             ),
         )
 
@@ -411,9 +461,9 @@ def create_trip(*, owner_user_id: int, payload: dict[str, Any]) -> dict[str, Any
                 _parse_thumbnail_url(payload.get("thumbnail_url")),
                 title,
                 to_nullable_string(payload.get("description")),
-                to_nullable_string(payload.get("latitude")),
-                to_nullable_string(payload.get("longitude")),
-                to_nullable_string(payload.get("cost")),
+                _parse_latitude(payload.get("latitude")),
+                _parse_longitude(payload.get("longitude")),
+                _parse_cost(payload.get("cost")),
                 _parse_duration(payload.get("duration")),
                 _parse_trip_date(payload.get("date")),
                 _parse_visibility(payload.get("visibility")),
@@ -480,9 +530,9 @@ def add_lodging(*, trip_id: int, owner_user_id: int, payload: dict[str, Any]) ->
                 _parse_thumbnail_url(payload.get("thumbnail_url")),
                 title,
                 to_nullable_string(payload.get("description")),
-                to_nullable_string(payload.get("latitude")),
-                to_nullable_string(payload.get("longitude")),
-                to_nullable_string(payload.get("cost")),
+                _parse_latitude(payload.get("latitude")),
+                _parse_longitude(payload.get("longitude")),
+                _parse_cost(payload.get("cost")),
             ),
         )
         row = cur.fetchone()
@@ -527,9 +577,9 @@ def add_activity(*, trip_id: int, owner_user_id: int, payload: dict[str, Any]) -
                 title,
                 to_nullable_string(payload.get("location")),
                 to_nullable_string(payload.get("description")),
-                to_nullable_string(payload.get("latitude")),
-                to_nullable_string(payload.get("longitude")),
-                to_nullable_string(payload.get("cost")),
+                _parse_latitude(payload.get("latitude")),
+                _parse_longitude(payload.get("longitude")),
+                _parse_cost(payload.get("cost")),
             ),
         )
         row = cur.fetchone()
@@ -541,6 +591,15 @@ def add_activity(*, trip_id: int, owner_user_id: int, payload: dict[str, Any]) -
         "activity_id": int(row["activity_id"]),
         "trip_id": trip_id,
     }
+
+
+def delete_trip(*, trip_id: int, owner_user_id: int):
+    _require_trip_owner(trip_id=trip_id, user_id=owner_user_id)
+
+    with get_cursor(commit=True) as cur:
+        cur.execute("DELETE FROM trips WHERE trip_id = %s", (trip_id,))
+        if cur.rowcount < 1:
+            raise TripNotFoundError("trip not found")
 
 
 def get_user_profile(*, user_id: int, viewer_user_id: int | None) -> dict[str, Any] | None:

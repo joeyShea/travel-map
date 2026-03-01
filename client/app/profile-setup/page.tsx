@@ -165,8 +165,16 @@ export default function ProfileSetupPage() {
         transitionToStep(stepIndex + 1);
     }
 
-    const disableNext =
-        isSaving || isTransitioning || (activeStep === "college" && accountType === "student" && !college.trim());
+    const isActiveStepComplete =
+        activeStep === "photo"
+            ? Boolean(profileImageFile)
+            : activeStep === "bio"
+              ? Boolean(bio.trim())
+              : activeStep === "college"
+                ? Boolean(college.trim())
+                : true;
+
+    const disableNext = isSaving || isTransitioning || !isActiveStepComplete;
 
     return (
         <div className="min-h-screen bg-[#fdf8f0] px-6 py-12 text-stone-800">

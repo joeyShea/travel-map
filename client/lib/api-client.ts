@@ -136,6 +136,12 @@ export async function addTripActivity(tripId: number, payload: AddActivityPayloa
   });
 }
 
+export async function deleteTrip(tripId: number) {
+  return requestJson<{ message: string }>(`/trips/${tripId}`, {
+    method: "DELETE",
+  });
+}
+
 export async function getUserProfile(userId: number): Promise<UserProfileResponse> {
   return requestJson<UserProfileResponse>(`/users/${userId}/profile`, { method: "GET" });
 }

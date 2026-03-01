@@ -3,18 +3,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { Loader2, MapPin, X } from "lucide-react";
 
-export interface PlaceOption {
-  label: string;
-  latitude: number;
-  longitude: number;
-  address: string;
-}
+import PinMapPicker from "@/components/pin-map-picker";
+import type { PlaceCenter, PlaceOption } from "@/lib/place-types";
+
+type PlaceSearchMode = "city" | "address";
 
 interface PlacePickerProps {
   label: string;
   placeholder?: string;
   value: PlaceOption | null;
   onChange: (value: PlaceOption | null) => void;
+  mode?: PlaceSearchMode;
+  cityContext?: PlaceCenter | null;
+  allowMapPin?: boolean;
 }
 
 export default function PlacePicker({
@@ -22,11 +23,15 @@ export default function PlacePicker({
   placeholder = "Search for a place",
   value,
   onChange,
+  mode = "address",
+  cityContext = null,
+  allowMapPin = false,
 }: PlacePickerProps) {
   const [query, setQuery] = useState(value?.label || "");
   const [results, setResults] = useState<PlaceOption[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [mapPickerOpen, setMapPickerOpen] = useState(false);
 
   useEffect(() => {
     setQuery(value?.label || "");
@@ -42,7 +47,17 @@ export default function PlacePicker({
     const timeoutId = window.setTimeout(async () => {
       try {
         setIsLoading(true);
-        const response = await fetch(`/api/places?q=${encodeURIComponent(trimmed)}`, {
+        const params = new URLSearchParams({
+          q: trimmed,
+          mode,
+        });
+
+        if (mode === "address" && cityContext) {
+          params.set("near_lat", `${cityContext.latitude}`);
+          params.set("near_lon", `${cityContext.longitude}`);
+        }
+
+        const response = await fetch(`/api/places?${params.toString()}`, {
           cache: "no-store",
         });
         const payload = await response.json();
@@ -61,7 +76,7 @@ export default function PlacePicker({
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [query]);
+  }, [cityContext, mode, query]);
 
   const showSuggestions = useMemo(() => {
     return isOpen && (isLoading || results.length > 0 || query.trim().length >= 2);
@@ -86,7 +101,7 @@ export default function PlacePicker({
               }
             }}
             placeholder={placeholder}
-            className="w-full bg-transparent text-sm text-stone-800 placeholder:text-stone-400 outline-none"
+            className="w-full bg-transparent text-sm text-stone-900 placeholder:text-stone-500 outline-none"
           />
           {value ? (
             <button
@@ -133,11 +148,40 @@ export default function PlacePicker({
         ) : null}
       </div>
 
-      {value ? (
-        <p className="text-xs text-stone-500">
-          Selected: <span className="font-medium text-stone-700">{value.label}</span>
-        </p>
-      ) : null}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {value ? (
+          <p className="text-xs text-stone-500">
+            Selected: <span className="font-medium text-stone-700">{value.label}</span>
+          </p>
+        ) : (
+          <span className="text-xs text-stone-500">
+            {mode === "city"
+              ? "Pick a broad area like a city or suburb."
+              : "Search an address or drop a pin on the map."}
+          </span>
+        )}
+
+        {allowMapPin ? (
+          <button
+            type="button"
+            onClick={() => setMapPickerOpen(true)}
+            className="rounded-full border border-stone-300 bg-white px-3 py-1 text-xs font-semibold text-stone-700 transition-colors hover:bg-stone-100"
+          >
+            Drop pin on map
+          </button>
+        ) : null}
+      </div>
+
+      <PinMapPicker
+        open={mapPickerOpen}
+        cityContext={cityContext}
+        initialValue={value}
+        onClose={() => setMapPickerOpen(false)}
+        onConfirm={(place) => {
+          onChange(place);
+          setQuery(place.label);
+        }}
+      />
     </div>
   );
 }

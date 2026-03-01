@@ -6,11 +6,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ImagePlus, MapPin, Plus, Sparkles, Trash2 } from "lucide-react";
 
 import { useAuth } from "@/components/auth-provider";
-import PlacePicker, { type PlaceOption } from "@/components/place-picker";
+import PlacePicker from "@/components/place-picker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { createTrip, uploadImage } from "@/lib/api-client";
+import { ApiError, createTrip, uploadImage } from "@/lib/api-client";
+import type { PlaceOption } from "@/lib/place-types";
 import { AVAILABLE_TAGS, BANNER_PLACEHOLDER } from "@/lib/trip-constants";
 import type { TripDuration, TripVisibility } from "@/lib/api-types";
 
@@ -20,6 +21,9 @@ interface StopDraft {
   notes: string;
   cost: string;
   imageUrl: string;
+  imageName: string;
+  imageError: string;
+  isProcessingImage: boolean;
   location: PlaceOption | null;
 }
 
@@ -57,8 +61,76 @@ function makeStopDraft(): StopDraft {
     notes: "",
     cost: "",
     imageUrl: "",
+    imageName: "",
+    imageError: "",
+    isProcessingImage: false,
     location: null,
   };
+}
+
+const READABLE_INPUT_CLASS = "bg-white text-stone-900 placeholder:text-stone-500";
+const READABLE_TEXTAREA_CLASS = "bg-white text-stone-900 placeholder:text-stone-500";
+const MAX_IMAGE_EDGE_PX = 1600;
+const IMAGE_OUTPUT_QUALITY = 0.84;
+const MAX_UPLOAD_BYTES = 12 * 1024 * 1024;
+
+async function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
+    reader.onerror = () => reject(new Error("Unable to read selected image"));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function dataUrlToImage(dataUrl: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("Could not decode image"));
+    image.src = dataUrl;
+  });
+}
+
+async function fileToOptimizedDataUrl(file: File): Promise<string> {
+  if (file.size > MAX_UPLOAD_BYTES) {
+    throw new Error("Image is too large. Please choose one under 12MB.");
+  }
+
+  const sourceDataUrl = await fileToDataUrl(file);
+  const image = await dataUrlToImage(sourceDataUrl);
+
+  const longestEdge = Math.max(image.naturalWidth || image.width, image.naturalHeight || image.height);
+  if (!longestEdge || longestEdge <= MAX_IMAGE_EDGE_PX) {
+    return sourceDataUrl;
+  }
+
+  const scale = MAX_IMAGE_EDGE_PX / longestEdge;
+  const nextWidth = Math.max(1, Math.round((image.naturalWidth || image.width) * scale));
+  const nextHeight = Math.max(1, Math.round((image.naturalHeight || image.height) * scale));
+
+  const canvas = document.createElement("canvas");
+  canvas.width = nextWidth;
+  canvas.height = nextHeight;
+
+  const context = canvas.getContext("2d");
+  if (!context) {
+    return sourceDataUrl;
+  }
+
+  context.drawImage(image, 0, 0, nextWidth, nextHeight);
+  const optimizedDataUrl = canvas.toDataURL("image/jpeg", IMAGE_OUTPUT_QUALITY);
+  return optimizedDataUrl || sourceDataUrl;
+}
+
+function hasStopContent(stop: StopDraft): boolean {
+  return Boolean(
+    stop.title.trim() ||
+      stop.notes.trim() ||
+      stop.cost.trim() ||
+      stop.imageUrl ||
+      stop.location,
+  );
 }
 
 export default function TripsPage() {
@@ -74,6 +146,9 @@ export default function TripsPage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [coverImage, setCoverImage] = useState("");
+  const [coverImageName, setCoverImageName] = useState("");
+  const [coverImageStatus, setCoverImageStatus] = useState<"idle" | "processing" | "ready" | "error">("idle");
+  const [coverImageError, setCoverImageError] = useState("");
   const [tripLocation, setTripLocation] = useState<PlaceOption | null>(null);
   const [cost, setCost] = useState("");
   const [duration, setDuration] = useState<TripDuration>("multiday trip");
@@ -83,6 +158,8 @@ export default function TripsPage() {
 
   const [lodgings, setLodgings] = useState<StopDraft[]>([]);
   const [activities, setActivities] = useState<StopDraft[]>([]);
+  const previewLodgings = lodgings.filter(hasStopContent);
+  const previewActivities = activities.filter(hasStopContent);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -137,6 +214,63 @@ export default function TripsPage() {
     setActivities((current) => current.filter((stop) => stop.id !== id));
   }
 
+  async function handleStopImageChange(kind: "lodging" | "activity", id: string, file?: File) {
+    if (!file) {
+      updateStop(kind, id, {
+        imageUrl: "",
+        imageName: "",
+        imageError: "",
+        isProcessingImage: false,
+      });
+      return;
+    }
+
+    updateStop(kind, id, {
+      imageError: "",
+      isProcessingImage: true,
+    });
+
+    try {
+      const dataUrl = await fileToOptimizedDataUrl(file);
+      updateStop(kind, id, {
+        imageUrl: dataUrl,
+        imageName: file.name,
+        imageError: "",
+        isProcessingImage: false,
+      });
+    } catch (imageError) {
+      updateStop(kind, id, {
+        imageError: imageError instanceof Error ? imageError.message : "Unable to process this image.",
+        isProcessingImage: false,
+      });
+    }
+  }
+
+  async function handleCoverImageChange(file?: File) {
+    if (!file) {
+      setCoverImage("");
+      setCoverImageName("");
+      setCoverImageStatus("idle");
+      setCoverImageError("");
+      return;
+    }
+
+    setCoverImageStatus("processing");
+    setCoverImageError("");
+
+    try {
+      const dataUrl = await fileToOptimizedDataUrl(file);
+      setCoverImage(dataUrl);
+      setCoverImageName(file.name);
+      setCoverImageStatus("ready");
+    } catch (imageError) {
+      setCoverImage("");
+      setCoverImageName("");
+      setCoverImageStatus("error");
+      setCoverImageError(imageError instanceof Error ? imageError.message : "Unable to process this image.");
+    }
+  }
+
   async function handleCreateTrip() {
     setError("");
 
@@ -165,9 +299,9 @@ export default function TripsPage() {
         visibility,
         tags: selectedTags,
         lodgings: lodgings
-          .filter((stop) => stop.title.trim())
+          .filter(hasStopContent)
           .map((stop) => ({
-            title: stop.title.trim(),
+            title: clean(stop.title),
             description: clean(stop.notes),
             address: stop.location?.address,
             latitude: stop.location ? `${stop.location.latitude}` : undefined,
@@ -176,9 +310,9 @@ export default function TripsPage() {
             thumbnail_url: clean(stop.imageUrl),
           })),
         activities: activities
-          .filter((stop) => stop.title.trim())
+          .filter(hasStopContent)
           .map((stop) => ({
-            title: stop.title.trim(),
+            title: clean(stop.title),
             description: clean(stop.notes),
             location: stop.location?.label,
             address: stop.location?.address,
@@ -191,8 +325,12 @@ export default function TripsPage() {
 
       router.push(returnTo);
       return;
-    } catch {
-      setError("Could not post this trip right now. Please try again.");
+    } catch (createError) {
+      if (createError instanceof ApiError) {
+        setError(createError.message);
+      } else {
+        setError("Could not post this trip right now. Please try again.");
+      }
     } finally {
       setIsSavingTrip(false);
     }
@@ -226,7 +364,7 @@ export default function TripsPage() {
                     accept="image/*"
                     disabled={isUploadingImage}
                     className="sr-only"
-                    onChange={async (event) => {
+                    onChange={(event) => {
                       const file = event.target.files?.[0];
                       if (!file) {
                         setCoverImage("");
@@ -246,9 +384,17 @@ export default function TripsPage() {
                     }}
                   />
                 </label>
-                <p className="text-sm text-stone-500">
-                  {coverImage ? "Cover selected. Preview updates live." : "No cover yet. Add one to set the tone."}
-                </p>
+                <div className="space-y-1 text-sm text-stone-500">
+                  <p>
+                    {coverImageStatus === "processing"
+                      ? "Processing cover image..."
+                      : coverImage
+                        ? "Cover selected. Preview updates live."
+                        : "No cover yet. Add one to set the tone."}
+                  </p>
+                  {coverImageName ? <p className="text-xs text-stone-500">Selected: {coverImageName}</p> : null}
+                  {coverImageError ? <p className="text-xs font-medium text-red-600">{coverImageError}</p> : null}
+                </div>
               </div>
             </div>
 
@@ -262,9 +408,10 @@ export default function TripsPage() {
 
               <PlacePicker
                 label="Trip location"
-                placeholder="Search city, park, landmark..."
+                placeholder="Search city or suburb..."
                 value={tripLocation}
                 onChange={setTripLocation}
+                mode="city"
               />
 
               <Textarea
@@ -272,23 +419,37 @@ export default function TripsPage() {
                 onChange={(event) => setDescription(event.target.value)}
                 rows={7}
                 placeholder="Tell the story: what you did, what surprised you, and what someone should know before visiting..."
-                className="resize-none rounded-2xl border-stone-200 bg-white text-base leading-relaxed"
+                className={`resize-none rounded-2xl border-stone-200 text-base leading-relaxed ${READABLE_TEXTAREA_CLASS}`}
               />
             </div>
 
             <div className="grid gap-4 rounded-2xl border border-stone-200 bg-stone-50/70 p-4 md:grid-cols-2">
               <div className="space-y-2">
                 <label className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">Date</label>
-                <Input type="month" value={date} onChange={(event) => setDate(event.target.value)} />
+                <Input
+                  type="month"
+                  value={date}
+                  onChange={(event) => setDate(event.target.value)}
+                  className={READABLE_INPUT_CLASS}
+                />
               </div>
               <div className="space-y-2">
-                <label className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">Budget</label>
-                <Input value={cost} onChange={(event) => setCost(event.target.value)} placeholder="$1450" />
+                <label className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">Cost</label>
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  value={cost}
+                  onChange={(event) => setCost(event.target.value)}
+                  placeholder="1450"
+                  className={READABLE_INPUT_CLASS}
+                />
               </div>
               <div className="space-y-2">
                 <label className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">Duration</label>
                 <select
-                  className="h-10 w-full rounded-md border border-input bg-white px-3 text-sm"
+                  className="h-10 w-full rounded-md border border-input bg-white px-3 text-sm text-stone-900"
                   value={duration}
                   onChange={(event) => setDuration(event.target.value as TripDuration)}
                 >
@@ -300,7 +461,7 @@ export default function TripsPage() {
               <div className="space-y-2">
                 <label className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">Visibility</label>
                 <select
-                  className="h-10 w-full rounded-md border border-input bg-white px-3 text-sm"
+                  className="h-10 w-full rounded-md border border-input bg-white px-3 text-sm text-stone-900"
                   value={visibility}
                   onChange={(event) => setVisibility(event.target.value as TripVisibility)}
                 >
@@ -367,13 +528,17 @@ export default function TripsPage() {
                         value={stop.title}
                         onChange={(event) => updateStop("lodging", stop.id, { title: event.target.value })}
                         placeholder="Name this stay"
+                        className={READABLE_INPUT_CLASS}
                       />
 
                       <PlacePicker
                         label="Location"
-                        placeholder="Search where this stay was"
+                        placeholder="Search an address"
                         value={stop.location}
                         onChange={(location) => updateStop("lodging", stop.id, { location })}
+                        mode="address"
+                        cityContext={tripLocation}
+                        allowMapPin
                       />
 
                       <Textarea
@@ -381,22 +546,26 @@ export default function TripsPage() {
                         rows={3}
                         onChange={(event) => updateStop("lodging", stop.id, { notes: event.target.value })}
                         placeholder="What made this place good (or bad)?"
-                        className="resize-none"
+                        className={`resize-none ${READABLE_TEXTAREA_CLASS}`}
                       />
 
                       <div className="grid gap-3 sm:grid-cols-2">
                         <Input
+                          type="number"
+                          inputMode="decimal"
+                          min="0"
+                          step="0.01"
                           value={stop.cost}
                           onChange={(event) => updateStop("lodging", stop.id, { cost: event.target.value })}
-                          placeholder="Cost"
+                          placeholder="Cost (optional)"
+                          className={READABLE_INPUT_CLASS}
                         />
                         <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-md border border-stone-200 bg-white px-3 py-2 text-sm text-stone-600 transition-colors hover:bg-stone-100">
                           <ImagePlus className="h-4 w-4 text-amber-700" />
-                          {isUploadingImage ? "Uploading..." : "Add photo"}
+                          Add photo
                           <input
                             type="file"
                             accept="image/*"
-                            disabled={isUploadingImage}
                             className="sr-only"
                             onChange={async (event) => {
                               const file = event.target.files?.[0];
@@ -404,16 +573,17 @@ export default function TripsPage() {
                                 updateStop("lodging", stop.id, { imageUrl: "" });
                                 return;
                               }
-
                               try {
                                 setError("");
-                                setIsUploadingImage(true);
+                                updateStop("lodging", stop.id, { isProcessingImage: true });
                                 const imageUrl = await uploadImage(file, "trips/lodging");
-                                updateStop("lodging", stop.id, { imageUrl });
-                              } catch {
-                                setError("Could not upload lodging image. Please try again.");
-                              } finally {
-                                setIsUploadingImage(false);
+                              }
+                              catch {
+                                updateStop("lodging", stop.id, { imageError: "Could not upload this image. Please try again.", isProcessingImage: false });
+                                setError("Could not upload one of the stop images. Please try again.");
+                              }
+                              finally {
+                                updateStop("lodging", stop.id, { isProcessingImage: false });
                               }
                             }}
                           />
@@ -458,13 +628,17 @@ export default function TripsPage() {
                         value={stop.title}
                         onChange={(event) => updateStop("activity", stop.id, { title: event.target.value })}
                         placeholder="Name this activity"
+                        className={READABLE_INPUT_CLASS}
                       />
 
                       <PlacePicker
                         label="Location"
-                        placeholder="Search where this activity was"
+                        placeholder="Search an address"
                         value={stop.location}
                         onChange={(location) => updateStop("activity", stop.id, { location })}
+                        mode="address"
+                        cityContext={tripLocation}
+                        allowMapPin
                       />
 
                       <Textarea
@@ -472,22 +646,26 @@ export default function TripsPage() {
                         rows={3}
                         onChange={(event) => updateStop("activity", stop.id, { notes: event.target.value })}
                         placeholder="What should people know before going?"
-                        className="resize-none"
+                        className={`resize-none ${READABLE_TEXTAREA_CLASS}`}
                       />
 
                       <div className="grid gap-3 sm:grid-cols-2">
                         <Input
+                          type="number"
+                          inputMode="decimal"
+                          min="0"
+                          step="0.01"
                           value={stop.cost}
                           onChange={(event) => updateStop("activity", stop.id, { cost: event.target.value })}
-                          placeholder="Cost"
+                          placeholder="Cost (optional)"
+                          className={READABLE_INPUT_CLASS}
                         />
                         <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-md border border-stone-200 bg-white px-3 py-2 text-sm text-stone-600 transition-colors hover:bg-stone-100">
                           <ImagePlus className="h-4 w-4 text-amber-700" />
-                          {isUploadingImage ? "Uploading..." : "Add photo"}
+                          {stop.imageUrl ? "Change photo" : "Add photo"}
                           <input
                             type="file"
                             accept="image/*"
-                            disabled={isUploadingImage}
                             className="sr-only"
                             onChange={async (event) => {
                               const file = event.target.files?.[0];
@@ -495,20 +673,63 @@ export default function TripsPage() {
                                 updateStop("activity", stop.id, { imageUrl: "" });
                                 return;
                               }
-
                               try {
                                 setError("");
-                                setIsUploadingImage(true);
+                                updateStop("activity", stop.id, { isProcessingImage: true });
                                 const imageUrl = await uploadImage(file, "trips/activity");
                                 updateStop("activity", stop.id, { imageUrl });
-                              } catch {
-                                setError("Could not upload activity image. Please try again.");
-                              } finally {
-                                setIsUploadingImage(false);
+                              }
+                              catch {
+                                updateStop("activity", stop.id, { imageError: "Could not upload this image. Please try again.", isProcessingImage: false });
+                                setError("Could not upload one of the stop images. Please try again.");
+                              }
+                              finally {
+                                updateStop("activity", stop.id, { isProcessingImage: false });
                               }
                             }}
                           />
                         </label>
+                        {/* {stop.isProcessingImage ? (
+                            <p className="text-xs text-stone-500">Processing image...</p>
+                          ) : stop.imageUrl ? (
+                            <p className="text-xs text-emerald-700">Photo attached.</p>
+                          ) : (
+                            <p className="text-xs text-stone-500">No photo selected.</p>
+                          )}
+                          {stop.imageError ? <p className="text-xs font-medium text-red-600">{stop.imageError}</p> : null}
+                        </div>
+                        {stop.imageUrl ? (
+                          <div className="sm:col-span-2">
+                            <div className="flex items-center gap-3 rounded-lg border border-stone-200 bg-white p-2">
+                              <img
+                                src={stop.imageUrl}
+                                alt={stop.title ? `${stop.title} preview` : "Activity photo preview"}
+                                className="h-20 w-20 rounded-md border border-stone-200 object-cover"
+                              />
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-xs font-medium text-stone-700">
+                                  {stop.imageName || "Selected image"}
+                                </p>
+                                <p className="text-xs text-stone-500">Preview shown as it will appear in this post.</p>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="rounded-full"
+                                onClick={() =>
+                                  updateStop("activity", stop.id, {
+                                    imageUrl: "",
+                                    imageName: "",
+                                    imageError: "",
+                                    isProcessingImage: false,
+                                  })
+                                }
+                              >
+                                Remove
+                              </Button>
+                            </div>
+                          </div>
+                        ) : null} */}
                       </div>
                     </div>
                   </div>
@@ -573,11 +794,13 @@ export default function TripsPage() {
 
                 <div className="space-y-3 text-sm">
                   <div>
-                    <p className="font-semibold text-stone-800">Stays ({lodgings.length})</p>
-                    {lodgings.length > 0 ? (
+                    <p className="font-semibold text-stone-800">Stays ({previewLodgings.length})</p>
+                    {previewLodgings.length > 0 ? (
                       <ul className="mt-1 space-y-1 text-stone-600">
-                        {lodgings.map((stop) => (
-                          <li key={stop.id}>{stop.title || "Untitled stay"}</li>
+                        {previewLodgings.map((stop) => (
+                          <li key={stop.id}>
+                            {stop.title || stop.location?.label || stop.location?.address || "Untitled stay"}
+                          </li>
                         ))}
                       </ul>
                     ) : (
@@ -586,13 +809,33 @@ export default function TripsPage() {
                   </div>
 
                   <div>
-                    <p className="font-semibold text-stone-800">Activities ({activities.length})</p>
-                    {activities.length > 0 ? (
-                      <ul className="mt-1 space-y-1 text-stone-600">
-                        {activities.map((stop) => (
-                          <li key={stop.id}>{stop.title || "Untitled activity"}</li>
+                    <p className="font-semibold text-stone-800">Activities ({previewActivities.length})</p>
+                    {previewActivities.length > 0 ? (
+                      <div className="mt-2 space-y-2">
+                        {previewActivities.map((stop) => (
+                          <article key={stop.id} className="rounded-xl border border-stone-200 bg-white p-2">
+                            <div className="flex items-start gap-3">
+                              <img
+                                src={stop.imageUrl || BANNER_PLACEHOLDER}
+                                alt={stop.title ? `${stop.title} preview` : "Activity preview"}
+                                className="h-16 w-16 rounded-md border border-stone-200 object-cover"
+                              />
+                              <div className="min-w-0 flex-1 space-y-1">
+                                <p className="truncate text-sm font-semibold text-stone-800">
+                                  {stop.title || "Untitled activity"}
+                                </p>
+                                <p className="truncate text-xs text-stone-500">
+                                  {stop.location?.label || stop.location?.address || "Location not set"}
+                                </p>
+                                <p className="max-h-10 overflow-hidden text-xs leading-relaxed text-stone-600">
+                                  {stop.notes || "No activity notes yet."}
+                                </p>
+                                <p className="text-xs text-stone-500">{stop.cost ? `Cost: ${stop.cost}` : "No cost added"}</p>
+                              </div>
+                            </div>
+                          </article>
                         ))}
-                      </ul>
+                      </div>
                     ) : (
                       <p className="mt-1 text-stone-500">No activities added.</p>
                     )}

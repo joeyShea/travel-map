@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { X, Mail, GraduationCap } from "lucide-react";
+import { X, Mail, GraduationCap, Trash2 } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -34,6 +34,9 @@ interface UserProfileModalProps {
     profile: UserProfile;
     onClose: () => void;
     onSelectTrip?: (tripId: number) => void;
+    canManageTrips?: boolean;
+    deletingTripId?: number | null;
+    onDeleteTrip?: (tripId: number) => void;
     expandFrom?: "top-right" | "left";
 }
 
@@ -62,6 +65,9 @@ export default function UserProfileModal({
     profile,
     onClose,
     onSelectTrip,
+    canManageTrips = false,
+    deletingTripId = null,
+    onDeleteTrip,
     expandFrom = "top-right",
 }: UserProfileModalProps) {
     const { signOut } = useAuth();
@@ -74,10 +80,7 @@ export default function UserProfileModal({
     return (
         <>
             {/* Backdrop */}
-            <div
-                className="backdrop-fade fixed inset-0 z-[1500] bg-foreground/10 backdrop-blur-sm"
-                onClick={onClose}
-            />
+            <div className="backdrop-fade fixed inset-0 z-[1500] bg-foreground/10 backdrop-blur-sm" onClick={onClose} />
 
             {/* Modal */}
             <div className={`${animClass} fixed inset-3 sm:inset-6 z-[1600] flex max-h-[calc(100vh-1.5rem)] sm:max-h-[calc(100vh-3rem)] flex-col rounded-2xl bg-card border border-border shadow-2xl overflow-hidden`}>
@@ -120,12 +123,7 @@ export default function UserProfileModal({
                                     {profile.university}
                                 </p>
                                 <div className="pt-2">
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => void signOut()}
-                                    >
+                                    <Button type="button" variant="outline" size="sm" onClick={() => void signOut()}>
                                         Logout
                                     </Button>
                                 </div>
@@ -133,9 +131,7 @@ export default function UserProfileModal({
                         </div>
 
                         {/* Bio */}
-                        <p className="max-w-2xl text-sm leading-relaxed text-foreground/75 mb-8">
-                            {profile.bio}
-                        </p>
+                        <p className="max-w-2xl text-sm leading-relaxed text-foreground/75 mb-8">{profile.bio}</p>
 
                         <div className="h-px bg-border mb-8" />
 
@@ -147,32 +143,48 @@ export default function UserProfileModal({
                                 </h2>
                                 <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
                                     {profile.trips.map((trip) => (
-                                        <button
+                                        <div
                                             key={trip.id}
-                                            type="button"
-                                            onClick={() => {
-                                                onSelectTrip?.(trip.id);
-                                                onClose();
-                                            }}
-                                            className="group flex flex-col overflow-hidden rounded-xl border border-border bg-background hover:border-primary/30 transition-colors"
+                                            className="group relative flex flex-col overflow-hidden rounded-xl border border-border bg-background hover:border-primary/30 transition-colors"
                                         >
-                                            <div className="relative aspect-video overflow-hidden">
-                                                <Image
-                                                    src={trip.thumbnail}
-                                                    alt={trip.title}
-                                                    fill
-                                                    className="object-cover transition-transform duration-300 group-hover:scale-105"
-                                                />
-                                            </div>
-                                            <div className="px-3 py-2.5">
-                                                <p className="text-sm font-semibold text-foreground truncate">
-                                                    {trip.title}
-                                                </p>
-                                                <p className="text-xs text-muted-foreground mt-0.5">
-                                                    {formatTripDate(trip.date)}
-                                                </p>
-                                            </div>
-                                        </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    onSelectTrip?.(trip.id);
+                                                    onClose();
+                                                }}
+                                                className="text-left"
+                                            >
+                                                <div className="relative aspect-video overflow-hidden">
+                                                    <Image
+                                                        src={trip.thumbnail}
+                                                        alt={trip.title}
+                                                        fill
+                                                        className="object-cover transition-transform duration-300 group-hover:scale-105"
+                                                    />
+                                                </div>
+                                                <div className="px-3 py-2.5">
+                                                    <p className="text-sm font-semibold text-foreground truncate">
+                                                        {trip.title}
+                                                    </p>
+                                                    <p className="text-xs text-muted-foreground mt-0.5">{trip.date}</p>
+                                                </div>
+                                            </button>
+                                            {canManageTrips ? (
+                                                <button
+                                                    type="button"
+                                                    onClick={(event) => {
+                                                        event.stopPropagation();
+                                                        onDeleteTrip?.(trip.id);
+                                                    }}
+                                                    disabled={deletingTripId === trip.id}
+                                                    className="absolute right-2 top-2 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full bg-black/55 text-white transition-colors hover:bg-black/75 disabled:cursor-not-allowed disabled:opacity-70"
+                                                    aria-label={`Delete ${trip.title}`}
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
+                                                </button>
+                                            ) : null}
+                                        </div>
                                     ))}
                                 </div>
                             </>
