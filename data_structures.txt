@@ -19,17 +19,21 @@ Traveler
 - favorited_trip_ids: List[trip_id]
 - favorited_traveler_ids: List[user_id]
 - planned_trip_ids: List[trip_id]
+- saved_activity_ids: List[activity_id]
+- saved_lodging_ids: List[lodge_id]
 
 
 CREATE TABLE travelers (
     user_id SERIAL PRIMARY KEY,
-    password_hash TEXT NOT NULL
+    password_hash TEXT NOT NULL,
     name VARCHAR(255),
     email VARCHAR(255) UNIQUE NOT NULL,
     bio TEXT,
     verified BOOLEAN DEFAULT FALSE,
     college VARCHAR(255),
-    profile_image_url TEXT
+    profile_image_url TEXT,
+    saved_activity_ids INT[] DEFAULT '{}',
+    saved_lodging_ids INT[] DEFAULT '{}'
 );
 
 

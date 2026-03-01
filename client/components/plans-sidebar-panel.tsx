@@ -11,8 +11,8 @@ interface PlansSidebarPanelProps {
   savedLodgings: SavedLodgingEntry[];
   onClose: () => void;
   onOpenTrip: (tripId: number) => void;
-  onToggleSavedActivity: (tripId: number, activityId: number) => void;
-  onToggleSavedLodging: (tripId: number, lodgingId: number) => void;
+  onToggleSavedActivity: (activityId: number) => void;
+  onToggleSavedLodging: (lodgingId: number) => void;
 }
 
 export default function PlansSidebarPanel({
@@ -63,7 +63,7 @@ export default function PlansSidebarPanel({
                     Activities ({savedActivities.length})
                   </p>
                   {savedActivities.map((entry) => (
-                    <div key={entry.key} className="flex items-center gap-3 rounded-lg bg-secondary/50 p-3">
+                    <div key={entry.activity.id} className="flex items-center gap-3 rounded-lg bg-secondary/50 p-3">
                       <button
                         type="button"
                         onClick={() => onOpenTrip(entry.tripId)}
@@ -88,7 +88,7 @@ export default function PlansSidebarPanel({
                       </button>
                       <button
                         type="button"
-                        onClick={() => onToggleSavedActivity(entry.tripId, entry.activity.id)}
+                        onClick={() => onToggleSavedActivity(entry.activity.id)}
                         className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border border-primary/30 bg-primary/10 text-primary transition-colors hover:bg-primary/20"
                         aria-label="Remove from plans"
                         title="Remove from plans"
@@ -106,7 +106,7 @@ export default function PlansSidebarPanel({
                     Places Stayed ({savedLodgings.length})
                   </p>
                   {savedLodgings.map((entry) => (
-                    <div key={entry.key} className="flex items-center gap-3 rounded-lg bg-secondary/50 p-3">
+                    <div key={entry.lodging.id} className="flex items-center gap-3 rounded-lg bg-secondary/50 p-3">
                       <button
                         type="button"
                         onClick={() => onOpenTrip(entry.tripId)}
@@ -131,7 +131,7 @@ export default function PlansSidebarPanel({
                       </button>
                       <button
                         type="button"
-                        onClick={() => onToggleSavedLodging(entry.tripId, entry.lodging.id)}
+                        onClick={() => onToggleSavedLodging(entry.lodging.id)}
                         className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border border-primary/30 bg-primary/10 text-primary transition-colors hover:bg-primary/20"
                         aria-label="Remove from plans"
                         title="Remove from plans"
