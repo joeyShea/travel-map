@@ -10,3 +10,4 @@ flask
 flask_session
 bcrypt
 Pillow
+aws-wsgi
