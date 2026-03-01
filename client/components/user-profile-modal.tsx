@@ -2,6 +2,8 @@
 
 import Image from "next/image";
 import { X, Mail, GraduationCap } from "lucide-react";
+import { useAuth } from "@/components/auth-provider";
+import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -39,6 +41,7 @@ export default function UserProfileModal({
     onSelectTrip,
     expandFrom = "top-right",
 }: UserProfileModalProps) {
+    const { signOut } = useAuth();
     const animClass = expandFrom === "left" ? "modal-expand-left" : "modal-expand";
 
     return (
@@ -79,6 +82,16 @@ export default function UserProfileModal({
                                     <GraduationCap className="h-3.5 w-3.5 flex-shrink-0" />
                                     {profile.university}
                                 </p>
+                                <div className="pt-2">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => void signOut()}
+                                    >
+                                        Logout
+                                    </Button>
+                                </div>
                             </div>
                         </div>
 

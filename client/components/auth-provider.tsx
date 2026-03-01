@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
-import { ApiError, getSession, getUserProfile } from "@/lib/api-client";
+import { ApiError, getSession, getUserProfile, logoutSession } from "@/lib/api-client";
 import type { SessionUser, UserProfileResponse } from "@/lib/api-types";
 
 type AuthStatus = "loading" | "authenticated" | "unauthenticated";
@@ -17,6 +17,7 @@ interface AuthContextValue {
   myProfile: UserProfileResponse | null;
   refreshSession: () => Promise<SessionUser | null>;
   refreshMyProfile: (userIdOverride?: number) => Promise<UserProfileResponse | null>;
+  signOut: () => Promise<void>;
 }
 
 const SESSION_CACHE_KEY = "travel-map.session-user.v1";
@@ -146,6 +147,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [myProfile, user?.user_id],
   );
 
+  const signOut = useCallback(async () => {
+    try {
+      await logoutSession();
+    } catch {
+      // Continue clearing client auth state even if network logout fails.
+    }
+
+    setUser(null);
+    setMyProfile(null);
+    setStatus("unauthenticated");
+    writeCachedJson(SESSION_CACHE_KEY, null);
+    writeCachedJson(PROFILE_CACHE_KEY, null);
+
+    if (typeof window !== "undefined") {
+      window.location.replace("/signup");
+    }
+  }, []);
+
   useEffect(() => {
     if (!isHydratedFromCache) {
       return;
@@ -206,8 +225,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       myProfile,
       refreshSession,
       refreshMyProfile,
+      signOut,
     };
-  }, [status, user, myProfile, refreshSession, refreshMyProfile]);
+  }, [status, user, myProfile, refreshSession, refreshMyProfile, signOut]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

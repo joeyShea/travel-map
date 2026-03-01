@@ -4,8 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { MapPin, GraduationCap, Globe } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
-
-const API_BASE_URL = "http://localhost:5001";
+import { API_BASE_URL } from "@/lib/api-client";
 
 type AccountType = "traveler" | "student";
 type Mode = "signup" | "signin";
@@ -124,7 +123,7 @@ export default function SignUpPage() {
          * clips the decorative SVGs). md+: two-row CSS grid where the heading
          * is anchored to the midpoint and the form grows downward only.
          */
-        <div className="relative min-h-screen overflow-x-hidden bg-[#fdf8f0] px-6 flex flex-col items-center py-12 md:grid md:grid-rows-2 md:py-0 md:items-stretch">
+        <div className="relative h-screen overflow-y-auto overflow-x-hidden bg-[#fdf8f0] px-6 flex flex-col items-center py-12 md:grid md:grid-rows-2 md:py-0 md:items-stretch">
             {/* Decorative travel paths */}
             <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
                 <svg className="absolute -left-8 top-8 opacity-[0.30]" width="280" height="200" fill="none">
