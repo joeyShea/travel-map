@@ -528,6 +528,15 @@ def add_activity(*, trip_id: int, owner_user_id: int, payload: dict[str, Any]) -
     }
 
 
+def delete_trip(*, trip_id: int, owner_user_id: int):
+    _require_trip_owner(trip_id=trip_id, user_id=owner_user_id)
+
+    with get_cursor(commit=True) as cur:
+        cur.execute("DELETE FROM trips WHERE trip_id = %s", (trip_id,))
+        if cur.rowcount < 1:
+            raise TripNotFoundError("trip not found")
+
+
 def get_user_profile(*, user_id: int, viewer_user_id: int | None) -> dict[str, Any] | None:
     with get_cursor() as cur:
         cur.execute(

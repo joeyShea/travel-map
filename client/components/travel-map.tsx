@@ -11,7 +11,7 @@ import SearchSidebarPanel from "@/components/search-sidebar-panel";
 import SidebarPanel from "@/components/sidebar-panel";
 import StudentAddMenu from "@/components/student-add-menu";
 import UserProfileModal, { type UserProfile } from "@/components/user-profile-modal";
-import { getTrip, getTrips, getUserProfile } from "@/lib/api-client";
+import { deleteTrip, getTrip, getTrips, getUserProfile } from "@/lib/api-client";
 import type { UserProfileResponse } from "@/lib/api-types";
 import type { MapActivity, MapTrip, ModalProfile } from "@/lib/trip-models";
 import { toMapTrip, toModalProfile } from "@/lib/trip-models";
@@ -28,6 +28,7 @@ const MapView = dynamic(() => import("@/components/map-view"), {
 interface ProfileState {
   profile: UserProfile;
   expandFrom: "top-right" | "left";
+  canManageTrips: boolean;
 }
 
 const REVIEW_PANEL_WIDTH = "min(420px, 100vw)";
@@ -63,6 +64,7 @@ export default function TravelMap() {
 
   const [isLoadingTrips, setIsLoadingTrips] = useState(true);
   const [isLoadingTripById, setIsLoadingTripById] = useState(false);
+  const [deletingTripId, setDeletingTripId] = useState<number | null>(null);
   const [profileCacheByUser, setProfileCacheByUser] = useState<Record<number, UserProfile>>({});
 
   const tripLookup = useMemo(() => {
@@ -177,10 +179,13 @@ export default function TravelMap() {
 
   const openProfile = useCallback(
     async (targetUserId: number, expandFrom: "top-right" | "left") => {
+      const canManageTrips = userId !== null && targetUserId === userId;
+
       if (userId !== null && targetUserId === userId && myProfile) {
         setProfileState({
           profile: toUserProfileFromApi(myProfile),
           expandFrom,
+          canManageTrips,
         });
       }
 
@@ -189,6 +194,7 @@ export default function TravelMap() {
         setProfileState({
           profile: cachedProfile,
           expandFrom,
+          canManageTrips,
         });
       }
 
@@ -204,6 +210,7 @@ export default function TravelMap() {
           setProfileState({
             profile: mappedOwnProfile,
             expandFrom,
+            canManageTrips,
           });
           return;
         }
@@ -215,12 +222,66 @@ export default function TravelMap() {
         setProfileState({
           profile: mappedProfile,
           expandFrom,
+          canManageTrips,
         });
       } catch {
         // Ignore profile lookup failures for now.
       }
     },
     [myProfile, profileCacheByUser, refreshMyProfile, userId],
+  );
+
+  const handleDeleteTrip = useCallback(
+    async (tripId: number) => {
+      if (userId === null) {
+        return;
+      }
+
+      setDeletingTripId(tripId);
+      try {
+        await deleteTrip(tripId);
+
+        setTrips((current) => current.filter((trip) => trip.id !== tripId));
+        setSelectedTrip((current) => (current?.id === tripId ? null : current));
+        setFullScreenTrip((current) => (current?.id === tripId ? null : current));
+        setSelectedActivity(null);
+
+        setProfileState((current) => {
+          if (!current || current.profile.userId !== userId) {
+            return current;
+          }
+
+          return {
+            ...current,
+            profile: {
+              ...current.profile,
+              trips: current.profile.trips.filter((trip) => trip.id !== tripId),
+            },
+          };
+        });
+
+        const refreshedOwnProfile = await refreshMyProfile(userId);
+        if (refreshedOwnProfile) {
+          const mappedOwnProfile = toUserProfileFromApi(refreshedOwnProfile);
+          setProfileCacheByUser((current) => ({ ...current, [mappedOwnProfile.userId]: mappedOwnProfile }));
+          setProfileState((current) => {
+            if (!current || current.profile.userId !== mappedOwnProfile.userId) {
+              return current;
+            }
+
+            return {
+              ...current,
+              profile: mappedOwnProfile,
+            };
+          });
+        }
+      } catch {
+        // Ignore delete failures for now.
+      } finally {
+        setDeletingTripId(null);
+      }
+    },
+    [refreshMyProfile, userId],
   );
 
   const handleSearchChange = useCallback((value: string) => {
@@ -337,6 +398,11 @@ export default function TravelMap() {
           key={`${profileState.profile.userId}-${profileState.expandFrom}`}
           profile={profileState.profile}
           expandFrom={profileState.expandFrom}
+          canManageTrips={profileState.canManageTrips}
+          deletingTripId={deletingTripId}
+          onDeleteTrip={(tripId) => {
+            void handleDeleteTrip(tripId);
+          }}
           onSelectTrip={(tripId) => {
             void openTripById(tripId);
           }}

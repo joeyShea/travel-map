@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { X, Mail, GraduationCap } from "lucide-react";
+import { X, Mail, GraduationCap, Trash2 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -30,6 +30,9 @@ interface UserProfileModalProps {
     profile: UserProfile;
     onClose: () => void;
     onSelectTrip?: (tripId: number) => void;
+    canManageTrips?: boolean;
+    deletingTripId?: number | null;
+    onDeleteTrip?: (tripId: number) => void;
     expandFrom?: "top-right" | "left";
 }
 
@@ -37,6 +40,9 @@ export default function UserProfileModal({
     profile,
     onClose,
     onSelectTrip,
+    canManageTrips = false,
+    deletingTripId = null,
+    onDeleteTrip,
     expandFrom = "top-right",
 }: UserProfileModalProps) {
     const animClass = expandFrom === "left" ? "modal-expand-left" : "modal-expand";
@@ -97,32 +103,50 @@ export default function UserProfileModal({
                                 </h2>
                                 <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
                                     {profile.trips.map((trip) => (
-                                        <button
+                                        <div
                                             key={trip.id}
-                                            type="button"
-                                            onClick={() => {
-                                                onSelectTrip?.(trip.id);
-                                                onClose();
-                                            }}
-                                            className="group flex flex-col overflow-hidden rounded-xl border border-border bg-background hover:border-primary/30 transition-colors"
+                                            className="group relative flex flex-col overflow-hidden rounded-xl border border-border bg-background hover:border-primary/30 transition-colors"
                                         >
-                                            <div className="relative aspect-video overflow-hidden">
-                                                <Image
-                                                    src={trip.thumbnail}
-                                                    alt={trip.title}
-                                                    fill
-                                                    className="object-cover transition-transform duration-300 group-hover:scale-105"
-                                                />
-                                            </div>
-                                            <div className="px-3 py-2.5">
-                                                <p className="text-sm font-semibold text-foreground truncate">
-                                                    {trip.title}
-                                                </p>
-                                                <p className="text-xs text-muted-foreground mt-0.5">
-                                                    {trip.date}
-                                                </p>
-                                            </div>
-                                        </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    onSelectTrip?.(trip.id);
+                                                    onClose();
+                                                }}
+                                                className="text-left"
+                                            >
+                                                <div className="relative aspect-video overflow-hidden">
+                                                    <Image
+                                                        src={trip.thumbnail}
+                                                        alt={trip.title}
+                                                        fill
+                                                        className="object-cover transition-transform duration-300 group-hover:scale-105"
+                                                    />
+                                                </div>
+                                                <div className="px-3 py-2.5">
+                                                    <p className="text-sm font-semibold text-foreground truncate">
+                                                        {trip.title}
+                                                    </p>
+                                                    <p className="text-xs text-muted-foreground mt-0.5">
+                                                        {trip.date}
+                                                    </p>
+                                                </div>
+                                            </button>
+                                            {canManageTrips ? (
+                                                <button
+                                                    type="button"
+                                                    onClick={(event) => {
+                                                        event.stopPropagation();
+                                                        onDeleteTrip?.(trip.id);
+                                                    }}
+                                                    disabled={deletingTripId === trip.id}
+                                                    className="absolute right-2 top-2 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full bg-black/55 text-white transition-colors hover:bg-black/75 disabled:cursor-not-allowed disabled:opacity-70"
+                                                    aria-label={`Delete ${trip.title}`}
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
+                                                </button>
+                                            ) : null}
+                                        </div>
                                     ))}
                                 </div>
                             </>

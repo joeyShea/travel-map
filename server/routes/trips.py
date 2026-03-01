@@ -10,6 +10,7 @@ from services.trip_service import (
     add_activity,
     add_lodging,
     create_trip,
+    delete_trip,
     get_trip,
     list_trips,
 )
@@ -50,6 +51,24 @@ def get_trip_by_id(trip_id: int):
     except Exception as error:
         current_app.logger.exception("Get trip failed")
         return jsonify({"error": f"get trip failed: {str(error)}"}), 500
+
+
+@trips_bp.route("/trips/<int:trip_id>", methods=["DELETE"])
+def delete_trip_by_id(trip_id: int):
+    user = get_authenticated_user(session)
+    if not user:
+        return jsonify({"error": "authentication required"}), 401
+
+    try:
+        delete_trip(trip_id=trip_id, owner_user_id=user["user_id"])
+        return jsonify({"message": "trip deleted"}), 200
+    except TripNotFoundError as error:
+        return jsonify({"error": str(error)}), 404
+    except TripForbiddenError as error:
+        return jsonify({"error": str(error)}), 403
+    except Exception as error:
+        current_app.logger.exception("Delete trip failed")
+        return jsonify({"error": f"delete trip failed: {str(error)}"}), 500
 
 
 @trips_bp.route("/trips", methods=["POST", "OPTIONS"])
