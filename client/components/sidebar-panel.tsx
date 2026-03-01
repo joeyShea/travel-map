@@ -2,8 +2,9 @@
 
 import Image from "next/image"
 import { X, ArrowRight, MapPin, Calendar, Notebook, ChevronLeft, ChevronRight, User, BedDouble } from "lucide-react"
-import { buildSavedActivityKey, type MapActivity, type MapTrip } from "@/lib/trip-models"
+import { buildSavedActivityKey, type MapActivity, type MapLodging, type MapTrip } from "@/lib/trip-models"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { cn } from "@/lib/utils"
 
 interface SidebarPanelProps {
   review: MapTrip
@@ -12,6 +13,10 @@ interface SidebarPanelProps {
   onOpenAuthorProfile: (userId: number) => void
   savedActivityKeys: ReadonlySet<string>
   onToggleSavedActivity: (tripId: number, activity: MapActivity) => void
+  selectedActivityId: number | null
+  selectedLodgingId: number | null
+  onSelectActivity: (activity: MapActivity | null) => void
+  onSelectLodging: (lodging: MapLodging | null) => void
   locationTripCount: number
   locationTripPosition: number
   onShowPreviousTripAtLocation: () => void
@@ -27,6 +32,10 @@ export default function SidebarPanel({
   onOpenAuthorProfile,
   savedActivityKeys,
   onToggleSavedActivity,
+  selectedActivityId,
+  selectedLodgingId,
+  onSelectActivity,
+  onSelectLodging,
   locationTripCount,
   locationTripPosition,
   onShowPreviousTripAtLocation,
@@ -108,9 +117,16 @@ export default function SidebarPanel({
             </h3>
             {review.lodgings.length > 0 ? (
               review.lodgings.map((lodging) => (
-                <div
+                <button
+                  type="button"
                   key={lodging.id}
-                  className="flex items-center gap-3 rounded-lg bg-secondary/40 p-3 transition-colors hover:bg-secondary/60"
+                  onClick={() => onSelectLodging(selectedLodgingId === lodging.id ? null : lodging)}
+                  className={cn(
+                    "flex w-full items-center gap-3 rounded-lg p-3 text-left transition-colors",
+                    selectedLodgingId === lodging.id
+                      ? "bg-primary/10 ring-1 ring-primary/30"
+                      : "bg-secondary/40 hover:bg-secondary/60",
+                  )}
                 >
                   <div className="relative h-12 w-12 flex-shrink-0 overflow-hidden rounded-md">
                     <Image src={lodging.image} alt={lodging.title} fill className="object-cover" />
@@ -119,7 +135,7 @@ export default function SidebarPanel({
                     <p className="truncate text-sm font-medium text-foreground">{lodging.title}</p>
                     <p className="truncate text-xs text-muted-foreground">{lodging.address}</p>
                   </div>
-                </div>
+                </button>
               ))
             ) : (
               <p className="text-sm text-muted-foreground">No places stayed were added for this trip.</p>
@@ -140,16 +156,25 @@ export default function SidebarPanel({
                     key={activity.id}
                     className="flex items-center gap-3 rounded-lg bg-secondary/60 p-3 transition-colors hover:bg-secondary"
                   >
-                    <div className="relative h-12 w-12 flex-shrink-0 overflow-hidden rounded-md">
-                      <Image src={activity.image} alt={activity.title} fill className="object-cover" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">{activity.title}</p>
-                      <p className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <MapPin className="h-3 w-3" />
-                        {activity.lat.toFixed(2)}, {activity.lng.toFixed(2)}
-                      </p>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onSelectActivity(selectedActivityId === activity.id ? null : activity)}
+                      className={cn(
+                        "flex min-w-0 flex-1 items-center gap-3 rounded-md px-1 py-0.5 text-left",
+                        selectedActivityId === activity.id ? "bg-primary/10 ring-1 ring-primary/30" : "",
+                      )}
+                    >
+                      <div className="relative h-12 w-12 flex-shrink-0 overflow-hidden rounded-md">
+                        <Image src={activity.image} alt={activity.title} fill className="object-cover" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="truncate text-sm font-medium text-foreground">{activity.title}</p>
+                        <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <MapPin className="h-3 w-3" />
+                          {activity.lat.toFixed(2)}, {activity.lng.toFixed(2)}
+                        </p>
+                      </div>
+                    </button>
                     <button
                       type="button"
                       onClick={() => onToggleSavedActivity(review.id, activity)}
