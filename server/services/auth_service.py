@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import MutableMapping
 from typing import Any
 
 from db import get_cursor
@@ -71,7 +72,7 @@ def get_user_by_id(user_id: int) -> dict[str, Any] | None:
     return normalize_user(row)
 
 
-def get_authenticated_user(session: dict[str, Any]) -> dict[str, Any] | None:
+def get_authenticated_user(session: MutableMapping[str, Any]) -> dict[str, Any] | None:
     session_user_id = session.get("user_id")
     if not isinstance(session_user_id, int):
         return None
